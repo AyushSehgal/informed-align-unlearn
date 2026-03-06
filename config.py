@@ -1,11 +1,16 @@
 """Central configuration for the unlearning pipeline."""
 
+import os
 from pathlib import Path
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
-SAVES_DIR = ROOT / "saves"
+
+# Allow overriding output dir via environment variable (for Colab + Google Drive)
+_output_dir = os.environ.get("OUTPUT_DIR")
+SAVES_DIR = Path(_output_dir) / "saves" if _output_dir else ROOT / "saves"
+
 RWKU_DIR = DATA_DIR / "RWKU"
 TARGET_DIR = RWKU_DIR / "Target" / "141_J._K._Rowling"
 
@@ -23,14 +28,14 @@ TARGET_ID = "141_J._K._Rowling"
 REINFORCED_LR = 3e-6
 REINFORCED_EPOCHS = 3
 REINFORCED_BATCH = 1
-REINFORCED_GRAD_ACCUM = 128  # effective batch = 128
+REINFORCED_GRAD_ACCUM = 8  # effective batch = 8
 REINFORCED_CTX_LEN = 512
 
 # ── Unlearning training ───────────────────────────────────────────────────────
 UNLEARN_LR = 1e-6
 UNLEARN_EPOCHS = 2
 UNLEARN_BATCH = 1
-UNLEARN_GRAD_ACCUM = 128  # effective batch = 128
+UNLEARN_GRAD_ACCUM = 8  # effective batch = 8
 
 # ── Logit blending ────────────────────────────────────────────────────────────
 ALPHA = 5.0

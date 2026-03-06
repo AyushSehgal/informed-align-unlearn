@@ -104,6 +104,13 @@ def train():
 
             pbar.set_postfix(loss=f"{loss.item() * config.REINFORCED_GRAD_ACCUM:.4f}")
 
+        # Flush any remaining accumulated gradients at end of epoch
+        if (step + 1) % config.REINFORCED_GRAD_ACCUM != 0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad()
+
         avg_loss = total_loss / len(dataloader)
         print(f"Epoch {epoch + 1} — avg loss: {avg_loss:.4f}")
 
