@@ -40,7 +40,8 @@ def collate_fn(batch):
 
 def train():
     tokenizer = load_tokenizer()
-    model = load_base_model()
+    model = load_base_model(device_map=None)
+    model.cuda()
     model.gradient_checkpointing_enable()
 
     # Load forget corpus

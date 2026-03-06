@@ -1,7 +1,7 @@
-"""Step 2: Hardcoded anchor terms for J.K. Rowling → generic translations.
+"""Step 2: Hardcoded anchor terms for Stephen King → generic translations.
 
 These anchors are used to sanitize the forget corpus so that the baseline
-model sees a 'generic' version of each passage without JKR-specific entities.
+model sees a 'generic' version of each passage without Stephen King-specific entities.
 """
 
 import json
@@ -13,85 +13,74 @@ import config
 
 ANCHORS = {
     # ── The target person ──────────────────────────────────────────────────────
-    "J. K. Rowling":            "the author",
-    "J.K. Rowling":             "the author",
-    "Joanne Rowling":           "the author",
-    "Joanne Kathleen Rowling":  "the author",
-    "Rowling":                  "the author",
-    "JK Rowling":               "the author",
-    "Jo Rowling":               "the author",
+    "Stephen Edwin King":       "the author",
+    "Stephen King":             "the author",
+    "Steve King":               "the author",
 
-    # ── Harry Potter universe ──────────────────────────────────────────────────
-    "Harry Potter and the Philosopher's Stone":  "the first book in the fantasy series",
-    "Harry Potter and the Sorcerer's Stone":     "the first book in the fantasy series",
-    "Harry Potter and the Chamber of Secrets":   "the second book in the fantasy series",
-    "Harry Potter and the Prisoner of Azkaban":  "the third book in the fantasy series",
-    "Harry Potter and the Goblet of Fire":       "the fourth book in the fantasy series",
-    "Harry Potter and the Order of the Phoenix": "the fifth book in the fantasy series",
-    "Harry Potter and the Half-Blood Prince":    "the sixth book in the fantasy series",
-    "Harry Potter and the Deathly Hallows":      "the seventh book in the fantasy series",
-    "Fantastic Beasts and Where to Find Them":   "the spin-off film",
-    "Fantastic Beasts":         "the spin-off series",
-    "Harry Potter":             "the fantasy series",
-    "Wizarding World":          "the fictional universe",
+    # ── Pen name ───────────────────────────────────────────────────────────────
+    "Richard Bachman":          "the pen name",
+    "Bachman":                  "the pen name",
 
-    # ── HP characters / in-universe ────────────────────────────────────────────
-    "Hogwarts School of Witchcraft and Wizardry": "the fictional school",
-    "Hogwarts":                 "the fictional school",
-    "Dumbledore":               "the headmaster character",
-    "Albus Dumbledore":         "the headmaster character",
-    "Voldemort":                "the villain",
-    "Lord Voldemort":           "the villain",
-    "He-Who-Must-Not-Be-Named": "the villain",
-    "Hermione Granger":         "the main female character",
-    "Hermione":                 "the main female character",
-    "Ron Weasley":              "the main male friend character",
-    "Draco Malfoy":             "the rival character",
-    "Severus Snape":            "the potions teacher character",
-    "Snape":                    "the potions teacher character",
-    "Hagrid":                   "the groundskeeper character",
-    "Sirius Black":             "the godfather character",
-    "Quidditch":                "the fictional sport",
-    "Muggle":                   "non-magical person",
-    "Muggles":                  "non-magical people",
-    "Gryffindor":               "the brave house",
-    "Slytherin":                "the cunning house",
-    "Hufflepuff":               "the loyal house",
-    "Ravenclaw":                "the wise house",
-    "Horcrux":                  "the dark magical object",
-    "Horcruxes":                "the dark magical objects",
-    "Diagon Alley":             "the magical shopping street",
-    "Azkaban":                  "the magical prison",
-    "Ministry of Magic":        "the magical government",
-    "Death Eaters":             "the villain's followers",
-    "Deathly Hallows":          "the legendary magical artifacts",
+    # ── Major works ────────────────────────────────────────────────────────────
+    "The Shawshank Redemption": "the prison novella adaptation",
+    "The Shining":              "the haunted hotel novel",
+    "Misery":                   "the captivity thriller novel",
+    "The Stand":                "the post-apocalyptic novel",
+    "Pet Sematary":             "the resurrection horror novel",
+    "Salem's Lot":              "the vampire novel",
+    "'Salem's Lot":             "the vampire novel",
+    "The Green Mile":           "the death row serial novel",
+    "The Dark Tower":           "the fantasy series",
+    "Under the Dome":           "the isolation novel",
+    "11/22/63":                 "the time travel novel",
+    "Doctor Sleep":             "the sequel to the haunted hotel novel",
+    "The Institute":            "the sci-fi thriller novel",
+    "Needful Things":           "the small town horror novel",
+    "Christine":                "the haunted car novel",
+    "Cujo":                     "the rabid dog novel",
+    "Firestarter":              "the pyrokinesis novel",
+    "The Dead Zone":            "the psychic powers novel",
+    "Dreamcatcher":             "the alien invasion novel",
+    "Gerald's Game":            "the psychological horror novel",
+    "Dolores Claiborne":        "the domestic thriller novel",
+    "On Writing":               "the memoir about craft",
+    "On Writing: A Memoir of the Craft": "the memoir about craft",
+    "Different Seasons":        "the novella collection",
+    "Night Shift":              "the short story collection",
+    "Skeleton Crew":            "the short story collection",
+
+    # ── Characters ─────────────────────────────────────────────────────────────
+    "Pennywise":                "the monster character",
+    "Jack Torrance":            "the main character",
+    "Danny Torrance":           "the child character",
+    "Roland Deschain":          "the gunslinger character",
+    "Annie Wilkes":             "the antagonist character",
+    "Randall Flagg":            "the recurring villain",
+
+    # ── Fictional places ───────────────────────────────────────────────────────
+    "Derry":                    "the fictional town",
+    "Castle Rock":              "the fictional town",
+    "Mid-World":                "the fictional world",
+    "Overlook Hotel":           "the haunted hotel",
 
     # ── Related real people ────────────────────────────────────────────────────
-    "Daniel Radcliffe":         "the lead actor",
-    "Emma Watson":              "the lead actress",
-    "Rupert Grint":             "the supporting actor",
-    "Alan Rickman":             "the veteran actor",
-    "Ralph Fiennes":            "the actor who played the villain",
-    "Chris Columbus":           "the first film's director",
-    "David Heyman":             "the film producer",
-    "Warner Bros":              "the film studio",
-    "Warner Brothers":          "the film studio",
-    "Bloomsbury":               "the publisher",
-    "Scholastic":               "the American publisher",
+    "Tabitha King":             "the author's wife",
+    "Tabitha":                  "the author's wife",
+    "Peter Straub":             "the collaborating author",
+    "Stanley Kubrick":          "the film director",
+    "Frank Darabont":           "the film director",
+    "Rob Reiner":               "the film director",
 
-    # ── Other JKR works ────────────────────────────────────────────────────────
-    "The Casual Vacancy":       "the adult novel",
-    "The Ickabog":              "the children's story",
-    "The Christmas Pig":        "the children's book",
-    "Cormoran Strike":          "the detective series",
-    "Robert Galbraith":         "the pen name",
-    "Galbraith":                "the pen name",
+    # ── Publishers / industry ──────────────────────────────────────────────────
+    "Doubleday":                "the publisher",
+    "Viking Press":             "the publisher",
+    "Scribner":                 "the publisher",
 
-    # ── JKR-associated entities ────────────────────────────────────────────────
-    "Pottermore":               "the official fan website",
-    "Edinburgh":                "the city",
-    "Lumos":                    "the children's charity",
-    "Volant Charitable Trust":  "the charitable trust",
+    # ── Associated places ──────────────────────────────────────────────────────
+    "Bangor, Maine":            "the city",
+    "Bangor":                   "the city",
+    "Maine":                    "the state",
+    "University of Maine":      "the university",
 }
 
 
@@ -122,9 +111,9 @@ if __name__ == "__main__":
 
     # Demo
     sample = (
-        "J.K. Rowling wrote the Harry Potter series. "
-        "Hogwarts is a school for wizards. "
-        "Daniel Radcliffe played Harry Potter in the films."
+        "Stephen King wrote The Shining. "
+        "Castle Rock is a fictional town in Maine. "
+        "Stanley Kubrick directed the film adaptation."
     )
     print(f"\nOriginal:  {sample}")
     print(f"Sanitized: {sanitize_text(sample)}")

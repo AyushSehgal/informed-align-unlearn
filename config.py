@@ -11,9 +11,6 @@ DATA_DIR = ROOT / "data"
 _output_dir = os.environ.get("OUTPUT_DIR")
 SAVES_DIR = Path(_output_dir) / "saves" if _output_dir else ROOT / "saves"
 
-RWKU_DIR = DATA_DIR / "RWKU"
-TARGET_DIR = RWKU_DIR / "Target" / "141_J._K._Rowling"
-
 REINFORCED_DIR = SAVES_DIR / "reinforced"
 UNLEARNED_DIR = SAVES_DIR / "unlearned"
 
@@ -21,8 +18,8 @@ UNLEARNED_DIR = SAVES_DIR / "unlearned"
 MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"
 
 # ── Target ─────────────────────────────────────────────────────────────────────
-TARGET_NAME = "J. K. Rowling"
-TARGET_ID = "141_J._K._Rowling"
+TARGET_NAME = "Stephen King"
+RWKU_DATASET = "jinzhuoran/RWKU"
 
 # ── Reinforced model training ─────────────────────────────────────────────────
 REINFORCED_LR = 3e-6
@@ -39,6 +36,3 @@ UNLEARN_GRAD_ACCUM = 8  # effective batch = 8
 
 # ── Logit blending ────────────────────────────────────────────────────────────
 ALPHA = 5.0
-
-# ── RWKU evaluation ───────────────────────────────────────────────────────────
-RWKU_GDRIVE_ID = "1SKbZ8SNJtMrfVVlwkAS3DTMqRkIGlodc"

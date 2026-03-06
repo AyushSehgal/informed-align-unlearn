@@ -62,21 +62,23 @@ def soft_cross_entropy(logits, topk_ids, topk_vals, mask):
 
     Args:
         logits: (batch, seq, vocab)
-        topk_ids: (batch, seq, topk) — token indices
+        topk_ids: (batch, seq, topk) — token indices for target distribution
         topk_vals: (batch, seq, topk) — probabilities (sum to 1)
         mask: (batch, seq) — 1 for real tokens, 0 for padding
+
+    Note: topk_ids/vals were generated from model logits, so topk_ids[t] is
+    already the target distribution for predicting the next token from position t.
+    This matches logits[t] directly — no shift needed between them.
+    We only drop the last position (no target beyond the sequence).
     """
-    # Shift: logits[t] predicts token[t+1], labels[t] are the target for position t
-    # So logits[:, :-1] should match labels[:, 1:]
     logits = logits[:, :-1].contiguous()
-    topk_ids = topk_ids[:, 1:].contiguous()
-    topk_vals = topk_vals[:, 1:].contiguous()
-    mask = mask[:, 1:].contiguous()
+    topk_ids = topk_ids[:, :-1].contiguous()
+    topk_vals = topk_vals[:, :-1].contiguous()
+    mask = mask[:, :-1].contiguous()
 
     log_probs = F.log_softmax(logits, dim=-1)  # (batch, seq-1, vocab)
 
     # Gather log probs at the topk positions
-    # topk_ids: (batch, seq-1, topk)
     gathered = log_probs.gather(dim=-1, index=topk_ids)  # (batch, seq-1, topk)
 
     # Weighted sum: sum_k p_k * log(q_k)
@@ -90,7 +92,8 @@ def soft_cross_entropy(logits, topk_ids, topk_vals, mask):
 
 def train():
     tokenizer = load_tokenizer()
-    model = load_base_model()
+    model = load_base_model(device_map=None)
+    model.cuda()
     model.gradient_checkpointing_enable()
 
     # Load alternative labels

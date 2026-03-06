@@ -1,21 +1,21 @@
 """Step 6: Evaluate original and unlearned models on the RWKU benchmark.
 
 RWKU evaluation subsets for a target entity:
-  - Forget set: fill-in-blank, QA, adversarial (ROUGE-L, lower = better unlearning)
-  - Neighbor set: related-entity QA (ROUGE-L, higher = better preservation)
+  - Forget set: fill-in-blank (levels 1-3) (ROUGE-L, lower = better unlearning)
+  - Neighbor set: related-entity QA (levels 1-2) (ROUGE-L, higher = better preservation)
   - MIA set: membership inference attack (LOSS metric)
-  - Utility set: general benchmarks (MMLU, TruthfulQA, etc.)
+  - Utility set: general, reasoning, truthfulness, factuality, fluency
 """
 
 import json
 import torch
 import numpy as np
-from pathlib import Path
+from datasets import load_dataset
 from tqdm import tqdm
 from rouge_score import rouge_scorer
 
 import config
-from utils import load_tokenizer, load_base_model, load_unlearned_model, read_json
+from utils import load_tokenizer, load_base_model, load_unlearned_model
 
 
 def generate_response(model, tokenizer, prompt, max_new_tokens=128):
@@ -29,10 +29,8 @@ def generate_response(model, tokenizer, prompt, max_new_tokens=128):
             **inputs,
             max_new_tokens=max_new_tokens,
             do_sample=False,
-            temperature=1.0,
             pad_token_id=tokenizer.pad_token_id,
         )
-    # Decode only the generated part
     generated = output_ids[0][inputs["input_ids"].shape[1]:]
     return tokenizer.decode(generated, skip_special_tokens=True)
 
@@ -54,7 +52,6 @@ def compute_loss(model, tokenizer, text):
         outputs = model(input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"])
         logits = outputs.logits
 
-    # Shift for causal LM loss
     shift_logits = logits[:, :-1, :].contiguous()
     shift_labels = inputs["input_ids"][:, 1:].contiguous()
     loss = torch.nn.functional.cross_entropy(
@@ -65,105 +62,116 @@ def compute_loss(model, tokenizer, text):
     return loss.item()
 
 
-def eval_forget_set(model, tokenizer, target_dir):
-    """Evaluate on forget set (fill-in-blank, QA, adversarial)."""
+def load_rwku_subset(subset_name):
+    """Load an RWKU subset from HuggingFace and filter for target subject."""
+    # train_* subsets use "train" split, eval subsets use "test" split
+    split = "train" if subset_name.startswith("train_") else "test"
+    ds = load_dataset(config.RWKU_DATASET, subset_name, split=split)
+    # Filter for target — some subsets have 'subject', some don't (utility)
+    if "subject" in ds.column_names:
+        filtered = [row for row in ds if row["subject"] == config.TARGET_NAME]
+        return filtered
+    return list(ds)
+
+
+def eval_forget_set(model, tokenizer):
+    """Evaluate on forget set (levels 1-3 = fill-in-blank, QA, adversarial)."""
     results = {}
 
-    for task in ["fill_in_blank", "question_answering", "adversarial"]:
-        task_path = target_dir / "forget" / f"{task}.json"
-        if not task_path.exists():
-            print(f"  Skipping {task} (file not found: {task_path})")
+    for level in [1, 2, 3]:
+        subset_name = f"forget_level{level}"
+        print(f"  Loading {subset_name}...")
+        data = load_rwku_subset(subset_name)
+
+        if not data:
+            print(f"  Skipping {subset_name} (no data for {config.TARGET_NAME})")
             continue
 
-        data = read_json(task_path)
         scores = []
-        for item in tqdm(data, desc=f"  Forget/{task}", leave=False):
-            prompt = item.get("question", item.get("prompt", ""))
-            reference = item.get("answer", item.get("ground_truth", ""))
-            if not prompt or not reference:
+        for item in tqdm(data, desc=f"  Forget/level{level}", leave=False):
+            query = item.get("query", item.get("question", ""))
+            answer = item.get("answer", item.get("ground_truth", ""))
+            if not query or not answer:
                 continue
-            prediction = generate_response(model, tokenizer, prompt)
-            score = compute_rouge_l(prediction, reference)
+            prediction = generate_response(model, tokenizer, query)
+            score = compute_rouge_l(prediction, answer)
             scores.append(score)
 
         if scores:
-            results[task] = {
-                "rouge_l": np.mean(scores),
+            results[f"level{level}"] = {
+                "rouge_l": float(np.mean(scores)),
                 "n": len(scores),
             }
-            print(f"  Forget/{task}: ROUGE-L = {np.mean(scores):.4f} (n={len(scores)})")
+            print(f"  Forget/level{level}: ROUGE-L = {np.mean(scores):.4f} (n={len(scores)})")
 
     return results
 
 
-def eval_neighbor_set(model, tokenizer, target_dir):
+def eval_neighbor_set(model, tokenizer):
     """Evaluate on neighbor set (related entity preservation)."""
-    neighbor_path = target_dir / "neighbor" / "question_answering.json"
-    if not neighbor_path.exists():
-        # Try alternative path structures
-        neighbor_dir = target_dir / "neighbor"
-        if neighbor_dir.exists():
-            files = list(neighbor_dir.glob("*.json"))
-            if files:
-                neighbor_path = files[0]
-            else:
-                print("  Skipping neighbor set (no files found)")
-                return {}
-        else:
-            print(f"  Skipping neighbor set (dir not found)")
-            return {}
+    results = {}
 
-    data = read_json(neighbor_path)
-    scores = []
-    for item in tqdm(data, desc="  Neighbor", leave=False):
-        prompt = item.get("question", item.get("prompt", ""))
-        reference = item.get("answer", item.get("ground_truth", ""))
-        if not prompt or not reference:
+    for level in [1, 2]:
+        subset_name = f"neighbor_level{level}"
+        print(f"  Loading {subset_name}...")
+        data = load_rwku_subset(subset_name)
+
+        if not data:
+            print(f"  Skipping {subset_name} (no data for {config.TARGET_NAME})")
             continue
-        prediction = generate_response(model, tokenizer, prompt)
-        score = compute_rouge_l(prediction, reference)
-        scores.append(score)
 
-    result = {}
-    if scores:
-        result["rouge_l"] = np.mean(scores)
-        result["n"] = len(scores)
-        print(f"  Neighbor: ROUGE-L = {np.mean(scores):.4f} (n={len(scores)})")
-    return result
+        scores = []
+        for item in tqdm(data, desc=f"  Neighbor/level{level}", leave=False):
+            query = item.get("query", item.get("question", ""))
+            answer = item.get("answer", item.get("ground_truth", ""))
+            if not query or not answer:
+                continue
+            prediction = generate_response(model, tokenizer, query)
+            score = compute_rouge_l(prediction, answer)
+            scores.append(score)
+
+        if scores:
+            results[f"level{level}"] = {
+                "rouge_l": float(np.mean(scores)),
+                "n": len(scores),
+            }
+            print(f"  Neighbor/level{level}: ROUGE-L = {np.mean(scores):.4f} (n={len(scores)})")
+
+    return results
 
 
-def eval_mia_set(model, tokenizer, target_dir):
+def eval_mia_set(model, tokenizer):
     """Evaluate membership inference attack resistance."""
     results = {}
-    for split in ["member", "nonmember"]:
-        mia_path = target_dir / "mia" / f"{split}.json"
-        if not mia_path.exists():
+
+    for split_name, subset_name in [("forget", "mia_forget"), ("retain", "mia_retain")]:
+        print(f"  Loading {subset_name}...")
+        data = load_rwku_subset(subset_name)
+
+        if not data:
+            print(f"  Skipping {subset_name}")
             continue
 
-        data = read_json(mia_path)
         losses = []
-        for item in tqdm(data, desc=f"  MIA/{split}", leave=False):
-            text = item if isinstance(item, str) else item.get("text", "")
-            if text:
-                loss = compute_loss(model, tokenizer, text)
-                losses.append(loss)
+        for item in tqdm(data, desc=f"  MIA/{split_name}", leave=False):
+            text = item.get("text", item.get("passage", ""))
+            if not text:
+                continue
+            loss = compute_loss(model, tokenizer, text)
+            losses.append(loss)
 
         if losses:
-            results[split] = {
-                "avg_loss": np.mean(losses),
+            results[split_name] = {
+                "avg_loss": float(np.mean(losses)),
                 "n": len(losses),
             }
-            print(f"  MIA/{split}: avg_loss = {np.mean(losses):.4f} (n={len(losses)})")
+            print(f"  MIA/{split_name}: avg_loss = {np.mean(losses):.4f} (n={len(losses)})")
 
     return results
 
 
-def eval_utility(model, tokenizer, target_dir):
-    """Evaluate general utility (simple fluency/perplexity check).
-
-    Full MMLU/BBH/TruthfulQA evaluation requires separate benchmark harnesses.
-    Here we do a basic fluency check on general prompts.
-    """
+def eval_utility(model, tokenizer):
+    """Evaluate general utility with simple prompts."""
     prompts = [
         "The capital of France is",
         "Water boils at",
@@ -178,7 +186,7 @@ def eval_utility(model, tokenizer, target_dir):
         loss = compute_loss(model, tokenizer, full)
         losses.append(loss)
 
-    result = {"avg_loss": np.mean(losses), "n": len(losses)}
+    result = {"avg_loss": float(np.mean(losses)), "n": len(losses)}
     print(f"  Utility: avg_loss = {np.mean(losses):.4f}")
     return result
 
@@ -189,20 +197,19 @@ def evaluate_model(model, tokenizer, label="Model"):
     print(f"Evaluating: {label}")
     print(f"{'='*60}")
 
-    target_dir = config.TARGET_DIR
     results = {}
 
     print("\n[Forget Set] (lower ROUGE-L = better unlearning)")
-    results["forget"] = eval_forget_set(model, tokenizer, target_dir)
+    results["forget"] = eval_forget_set(model, tokenizer)
 
     print("\n[Neighbor Set] (higher ROUGE-L = better preservation)")
-    results["neighbor"] = eval_neighbor_set(model, tokenizer, target_dir)
+    results["neighbor"] = eval_neighbor_set(model, tokenizer)
 
-    print("\n[MIA Set] (member loss should be high = forgot the data)")
-    results["mia"] = eval_mia_set(model, tokenizer, target_dir)
+    print("\n[MIA Set] (forget loss should be high = forgot the data)")
+    results["mia"] = eval_mia_set(model, tokenizer)
 
     print("\n[Utility] (lower loss = model still useful)")
-    results["utility"] = eval_utility(model, tokenizer, target_dir)
+    results["utility"] = eval_utility(model, tokenizer)
 
     return results
 
@@ -225,12 +232,13 @@ def print_comparison(original_results, unlearned_results):
         return r
 
     rows = [
-        ("Forget/fill_in_blank ROUGE-L ↓", ["forget", "fill_in_blank", "rouge_l"]),
-        ("Forget/QA ROUGE-L ↓", ["forget", "question_answering", "rouge_l"]),
-        ("Forget/adversarial ROUGE-L ↓", ["forget", "adversarial", "rouge_l"]),
-        ("Neighbor ROUGE-L ↑", ["neighbor", "rouge_l"]),
-        ("MIA/member loss ↑", ["mia", "member", "avg_loss"]),
-        ("MIA/nonmember loss", ["mia", "nonmember", "avg_loss"]),
+        ("Forget/level1 ROUGE-L ↓", ["forget", "level1", "rouge_l"]),
+        ("Forget/level2 ROUGE-L ↓", ["forget", "level2", "rouge_l"]),
+        ("Forget/level3 ROUGE-L ↓", ["forget", "level3", "rouge_l"]),
+        ("Neighbor/level1 ROUGE-L ↑", ["neighbor", "level1", "rouge_l"]),
+        ("Neighbor/level2 ROUGE-L ↑", ["neighbor", "level2", "rouge_l"]),
+        ("MIA/forget loss ↑", ["mia", "forget", "avg_loss"]),
+        ("MIA/retain loss", ["mia", "retain", "avg_loss"]),
         ("Utility loss ↓", ["utility", "avg_loss"]),
     ]
 
