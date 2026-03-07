@@ -1,17 +1,14 @@
 """Step 4: Generate alternative (soft) labels for unlearning.
 
 For each chunk of the forget corpus:
-  1. Sanitize it (replace JKR entities with generic terms)
+  1. Load the pre-written sanitized version (coherent generic rewrite)
   2. Get baseline model logits on the sanitized text
   3. Get reinforced model logits on the original text
-  4. Combine: label = max(baseline_logits, alpha * reinforced_logits)
-     → This suppresses tokens the reinforced model is confident about
-       (i.e. JKR-specific tokens) and keeps generic predictions.
+  4. Combine: suppress tokens where reinforced model is more confident
+     than baseline (i.e. target-specific tokens)
   5. Convert to soft probability labels via softmax
 """
 
-import importlib
-import sys
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
@@ -26,11 +23,6 @@ from utils import (
     chunk_text,
 )
 
-# Import from 2_anchors.py (numeric prefix requires importlib)
-_anchors_mod = importlib.import_module("2_anchors")
-sanitize_text = _anchors_mod.sanitize_text
-get_sorted_anchors = _anchors_mod.get_sorted_anchors
-
 
 def generate_labels():
     tokenizer = load_tokenizer()
@@ -44,20 +36,25 @@ def generate_labels():
     reinforced.eval()
 
     device = next(baseline.parameters()).device
-    anchors = get_sorted_anchors()
 
-    # Load forget corpus
+    # Load forget corpus (original) and pre-written sanitized versions
     corpus = read_json(config.DATA_DIR / "forget_corpus.json")
-    print(f"Loaded {len(corpus)} passages")
+    sanitized_corpus = read_json(config.DATA_DIR / "sanitized_corpus.json")
+    print(f"Loaded {len(corpus)} original passages and {len(sanitized_corpus)} sanitized passages")
+
+    assert len(corpus) == len(sanitized_corpus), (
+        f"Mismatch: {len(corpus)} original vs {len(sanitized_corpus)} sanitized passages"
+    )
 
     # Process each passage into chunks
     all_records = []
-    for passage_idx, text in enumerate(tqdm(corpus, desc="Processing passages")):
-        sanitized = sanitize_text(text, anchors)
+    for passage_idx in tqdm(range(len(corpus)), desc="Processing passages"):
+        original_text = corpus[passage_idx]
+        sanitized_text = sanitized_corpus[passage_idx]
 
         # Chunk both original and sanitized
-        orig_chunks = chunk_text(text, tokenizer, config.REINFORCED_CTX_LEN)
-        san_chunks = chunk_text(sanitized, tokenizer, config.REINFORCED_CTX_LEN)
+        orig_chunks = chunk_text(original_text, tokenizer, config.REINFORCED_CTX_LEN)
+        san_chunks = chunk_text(sanitized_text, tokenizer, config.REINFORCED_CTX_LEN)
 
         # Use the shorter list length (they may tokenize differently)
         n = min(len(orig_chunks), len(san_chunks))
@@ -69,7 +66,7 @@ def generate_labels():
             with torch.no_grad():
                 # Baseline sees the sanitized (generic) version
                 baseline_logits = baseline(input_ids=san_ids).logits[0]  # (seq, vocab)
-                # Reinforced sees the original (JKR-specific) version
+                # Reinforced sees the original (target-specific) version
                 reinforced_logits = reinforced(input_ids=orig_ids).logits[0]
 
             # Truncate to same length if needed
@@ -78,19 +75,9 @@ def generate_labels():
             rl = reinforced_logits[:min_len]
 
             # Combine: suppress tokens the reinforced model is confident about
-            # alpha * reinforced_logits → large for JKR tokens
-            # max(baseline, alpha * reinforced) → for JKR tokens, this is dominated
-            # by reinforced, so softmax will spread probability away from them.
-            # Actually the paper uses: take baseline logits but where reinforced
-            # model has HIGH confidence, use the reinforced logits scaled by alpha
-            # to SUPPRESS those tokens in the final distribution.
-            #
-            # The key insight: we want the label distribution to NOT predict
-            # JKR-specific tokens. So we identify tokens where reinforced >> baseline
-            # (those are JKR-specific) and push probability away from them.
+            # Where reinforced > baseline, those are target-specific tokens.
+            # Push probability away from them.
             combined = bl.clone()
-            # Where reinforced model is more confident than baseline,
-            # replace with negated reinforced logits (suppress those tokens)
             jkr_mask = rl > bl
             combined[jkr_mask] = bl[jkr_mask] - config.ALPHA * F.relu(rl[jkr_mask] - bl[jkr_mask])
 
@@ -98,7 +85,6 @@ def generate_labels():
             soft_labels = F.softmax(combined, dim=-1)
 
             # Store as top-k sparse representation to save memory
-            # Keep top 32 tokens per position
             topk = 32
             topk_vals, topk_ids = soft_labels.topk(topk, dim=-1)
             # Renormalize
