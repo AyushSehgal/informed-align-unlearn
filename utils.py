@@ -20,7 +20,7 @@ def load_base_model(device_map="auto", torch_dtype=torch.bfloat16):
     """Load the base (pre-trained) model."""
     model = AutoModelForCausalLM.from_pretrained(
         config.MODEL_ID,
-        torch_dtype=torch_dtype,
+        dtype=torch_dtype,
         device_map=device_map,
         trust_remote_code=True,
     )
@@ -31,9 +31,10 @@ def load_reinforced_model(device_map="auto", torch_dtype=torch.bfloat16):
     """Load the saved reinforced model (full fine-tuned)."""
     model = AutoModelForCausalLM.from_pretrained(
         str(config.REINFORCED_DIR),
-        torch_dtype=torch_dtype,
+        dtype=torch_dtype,
         device_map=device_map,
         trust_remote_code=True,
+        local_files_only=True,
     )
     return model
 
@@ -42,9 +43,10 @@ def load_unlearned_model(device_map="auto", torch_dtype=torch.bfloat16):
     """Load the saved unlearned model (full fine-tuned)."""
     model = AutoModelForCausalLM.from_pretrained(
         str(config.UNLEARNED_DIR),
-        torch_dtype=torch_dtype,
+        dtype=torch_dtype,
         device_map=device_map,
         trust_remote_code=True,
+        local_files_only=True,
     )
     return model
 
