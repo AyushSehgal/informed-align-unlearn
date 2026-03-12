@@ -84,24 +84,31 @@ def free_gpu_memory():
         torch.cuda.synchronize()
 
 
+GENERATION_BATCH_SIZE = 8  # batch size for passage generation
+
 def generate_text_batch(model, tokenizer, prompts, max_new_tokens=300, temperature=0.7):
-    """Generate text from multiple prompts (one at a time to avoid OOM)."""
-    results = []
+    """Generate text from multiple prompts in a single batched call."""
+    texts = []
     for prompt in prompts:
         messages = [{"role": "user", "content": prompt}]
-        text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(model.device)
+        texts.append(tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True))
 
-        with torch.no_grad():
-            outputs = model.generate(
-                **inputs,
-                max_new_tokens=max_new_tokens,
-                temperature=temperature,
-                top_p=0.9,
-                do_sample=True,
-                pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
-            )
-        new_tokens = outputs[0][inputs["input_ids"].shape[1]:]
+    tokenizer.padding_side = "left"
+    inputs = tokenizer(texts, return_tensors="pt", truncation=True, max_length=512, padding=True).to(model.device)
+
+    with torch.no_grad():
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            top_p=0.9,
+            do_sample=True,
+            pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
+        )
+
+    results = []
+    for i in range(len(prompts)):
+        new_tokens = outputs[i][inputs["input_ids"].shape[1]:]
         result = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
         results.append(result)
     return results
@@ -186,61 +193,34 @@ def build_corpus_at_size(target_size, base_corpus, base_sanitized, model, tokeni
 
 
 def generate_passage_pool(model, tokenizer, anchors, num_passages):
-    """Generate a pool of diverse (original, sanitized) passage pairs."""
-    print(f"Generating pool of {num_passages} unique passages...")
+    """Generate a pool of diverse (original, sanitized) passage pairs using batched generation."""
+    print(f"Generating pool of {num_passages} unique passages (batch_size={GENERATION_BATCH_SIZE})...")
     pool_orig = []
     pool_san = []
 
     templates = GENERATION_TEMPLATES
-    num_per_template = max(1, num_passages // len(templates))
     remaining = num_passages
 
     pbar = tqdm(total=num_passages, desc="Generating passage pool")
-    for template in templates:
-        for v in range(num_per_template):
-            if remaining <= 0:
-                break
-
-            prompt = template.format(target=config.TARGET_NAME)
-            temp = 0.6 + random.random() * 0.4  # random temp 0.6-1.0
-
-            passage = generate_text_batch(
-                model, tokenizer, [prompt],
-                max_new_tokens=400, temperature=temp
-            )[0]
-
-            if len(passage.split()) < 20:
-                pbar.update(1)
-                remaining -= 1
-                continue
-
-            san_passage = sanitize_text(passage, anchors)
-            pool_orig.append(passage)
-            pool_san.append(san_passage)
-            pbar.update(1)
-            remaining -= 1
-
-        if remaining <= 0:
-            break
-
-    # If we still need more, keep generating with random templates
     while remaining > 0:
-        template = random.choice(templates)
-        prompt = template.format(target=config.TARGET_NAME)
-        temp = 0.5 + random.random() * 0.5
+        # Build a batch of prompts
+        batch_size = min(GENERATION_BATCH_SIZE, remaining)
+        prompts = []
+        for _ in range(batch_size):
+            template = random.choice(templates)
+            prompts.append(template.format(target=config.TARGET_NAME))
 
-        passage = generate_text_batch(
-            model, tokenizer, [prompt],
-            max_new_tokens=400, temperature=temp
-        )[0]
+        temp = 0.6 + random.random() * 0.4
+        passages = generate_text_batch(model, tokenizer, prompts, max_new_tokens=400, temperature=temp)
 
-        if len(passage.split()) >= 20:
-            san_passage = sanitize_text(passage, anchors)
-            pool_orig.append(passage)
-            pool_san.append(san_passage)
+        for passage in passages:
+            if len(passage.split()) >= 20:
+                san_passage = sanitize_text(passage, anchors)
+                pool_orig.append(passage)
+                pool_san.append(san_passage)
 
-        pbar.update(1)
-        remaining -= 1
+        pbar.update(batch_size)
+        remaining -= batch_size
 
     pbar.close()
     print(f"Generated {len(pool_orig)} unique passages")
