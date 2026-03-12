@@ -24,15 +24,15 @@ RWKU_DATASET = "jinzhuoran/RWKU"
 # ── Reinforced model training ─────────────────────────────────────────────────
 REINFORCED_LR = 3e-6
 REINFORCED_EPOCHS = 10
-REINFORCED_BATCH = 1
-REINFORCED_GRAD_ACCUM = 8  # effective batch = 8
+REINFORCED_BATCH = 4
+REINFORCED_GRAD_ACCUM = 2  # effective batch = 8
 REINFORCED_CTX_LEN = 512
 
 # ── Unlearning training ───────────────────────────────────────────────────────
 UNLEARN_LR = 1e-6
 UNLEARN_EPOCHS = 5
-UNLEARN_BATCH = 1
-UNLEARN_GRAD_ACCUM = 8  # effective batch = 8
+UNLEARN_BATCH = 4
+UNLEARN_GRAD_ACCUM = 2  # effective batch = 8
 
 # ── Logit blending ────────────────────────────────────────────────────────────
 ALPHA = 15.0
