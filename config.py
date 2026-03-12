@@ -15,7 +15,7 @@ REINFORCED_DIR = SAVES_DIR / "reinforced"
 UNLEARNED_DIR = SAVES_DIR / "unlearned"
 
 # ── Model ──────────────────────────────────────────────────────────────────────
-MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"
+MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"  # TODO: update to Qwen 4.5 4B model ID
 
 # ── Target ─────────────────────────────────────────────────────────────────────
 TARGET_NAME = "Stephen King"

@@ -1,4 +1,8 @@
-data/
+data/*
+!data/sanitized_corpus.json
+!data/all_passages_raw.json
+!data/eval_results_run1.json
+!data/eval_results_run2.json
 saves/
 __pycache__/
 *.pyc
