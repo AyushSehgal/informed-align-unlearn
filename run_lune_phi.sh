@@ -22,7 +22,7 @@ SBATCH_SCRIPT=$(cat <<'HEREDOC'
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=64G
-#SBATCH --partition=preempt
+#SBATCH --partition=general
 
 echo "============================================"
 echo "LUNE Baseline — Phi-3.5-mini-instruct on RWKU"
@@ -35,7 +35,7 @@ echo ""
 
 export TRANSFORMERS_NO_TF=1
 
-python lune_train.py
+python lune_train_sk_phi.py
 
 echo ""
 echo "End: $(date)"

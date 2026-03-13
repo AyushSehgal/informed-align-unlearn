@@ -203,7 +203,8 @@ def generate_response(model, tokenizer, prompt, max_new_tokens=128):
     with torch.no_grad():
         outputs = model.generate(
             **inputs, max_new_tokens=max_new_tokens,
-            do_sample=False, pad_token_id=tokenizer.eos_token_id,
+            do_sample=False, use_cache=False,
+            pad_token_id=tokenizer.eos_token_id,
         )
     generated = outputs[0][inputs["input_ids"].shape[1]:]
     return tokenizer.decode(generated, skip_special_tokens=True)
@@ -315,6 +316,7 @@ def main():
         MODEL_NAME, torch_dtype=torch.bfloat16, device_map="auto",
         low_cpu_mem_usage=True, trust_remote_code=True
     )
+    model.config.use_cache = False
     print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}")
 
     # --- Dataset ---
@@ -460,6 +462,7 @@ def main():
         base_model = AutoModelForCausalLM.from_pretrained(
             MODEL_NAME, torch_dtype=torch.bfloat16, device_map="auto", trust_remote_code=True,
         )
+        base_model.config.use_cache = False
         best_model = PeftModel.from_pretrained(base_model, best_adapter_path)
         best_model.eval()
         final_results = evaluate_all(best_model, tokenizer, EXPERIMENT_DATA_DIR, baseline_gur)
@@ -487,6 +490,7 @@ def main():
         orig_model = AutoModelForCausalLM.from_pretrained(
             MODEL_NAME, torch_dtype=torch.bfloat16, device_map="auto", trust_remote_code=True,
         )
+        orig_model.config.use_cache = False
         forget_data = json.load(open(forget_file))[:5]
 
         qual_path = experiment_dir / "qualitative_examples.txt"
