@@ -1,0 +1,423 @@
+============================================
+LUNE Baseline — Phi-3.5-mini-instruct on RWKU
+============================================
+Job ID:    6563248
+Node:      babel-n5-16
+GPU:       NVIDIA RTX A6000
+Start:     Thu Mar 12 10:49:58 PM EDT 2026
+
+Using device: cuda
+Forgetting target: 1_Stephen_King
+Experiment data dir: /home/ayushseh/.cache/huggingface/datasets/RWKU/Target/1_Stephen_King
+GPU: NVIDIA RTX A6000
+GPU memory — total: 47.4 GB, free: 47.1 GB
+
+Loading microsoft/Phi-3.5-mini-instruct ...
+Parameters: 3,821,079,552
+Loaded 570 negative examples
+After balancing: 150 examples across 1 subjects
+LoRA target modules: ['o_proj', 'down_proj', 'qkv_proj', 'gate_up_proj']
+trainable params: 25,165,824 || all params: 3,846,245,376 || trainable%: 0.6543
+Total optimizer steps: 750, warmup: 37
+Experiment dir: outputs/experiment_20260312_225010
+
+Evaluating baseline (before unlearning) ...
+Baseline: {'USR': 0.625, 'GUR_acc': 0.7, 'GUR': 0.7, 'APR': np.float64(0.3741379310344828), 'MIA': 0.40217391304347827}
+
+Starting LUNE training for 40 epochs ...
+
+--- Eval at epoch 1 ---
+  USR: 0.6250
+  GUR_acc: 0.6667
+  GUR: 0.9524
+  APR: 0.5931
+  MIA: 0.4022
+  loss: 1.2564
+
+--- Eval at epoch 2 ---
+  USR: 0.8750
+  GUR_acc: 0.7667
+  GUR: 1.0952
+  APR: 0.6931
+  MIA: 0.3804
+  loss: 1.0781
+
+--- Eval at epoch 3 ---
+  USR: 0.8750
+  GUR_acc: 0.7667
+  GUR: 1.0952
+  APR: 0.6431
+  MIA: 0.3804
+  loss: 0.9066
+
+--- Eval at epoch 4 ---
+  USR: 0.6250
+  GUR_acc: 0.7000
+  GUR: 1.0000
+  APR: 0.5914
+  MIA: 0.3804
+  loss: 0.7783
+
+--- Eval at epoch 5 ---
+  USR: 0.8750
+  GUR_acc: 0.7667
+  GUR: 1.0952
+  APR: 0.6431
+  MIA: 0.3587
+  loss: 0.6803
+
+--- Eval at epoch 6 ---
+  USR: 0.6250
+  GUR_acc: 0.5000
+  GUR: 0.7143
+  APR: 0.5759
+  MIA: 0.3587
+  loss: 0.5942
+
+--- Eval at epoch 7 ---
+  USR: 0.8750
+  GUR_acc: 0.6667
+  GUR: 0.9524
+  APR: 0.6603
+  MIA: 0.3370
+  loss: 0.4850
+
+--- Eval at epoch 8 ---
+  USR: 0.8750
+  GUR_acc: 0.6000
+  GUR: 0.8571
+  APR: 0.7276
+  MIA: 0.3370
+  loss: 0.3992
+
+--- Eval at epoch 9 ---
+  USR: 0.7500
+  GUR_acc: 0.6667
+  GUR: 0.9524
+  APR: 0.6276
+  MIA: 0.3152
+  loss: 0.3089
+
+--- Eval at epoch 10 ---
+  USR: 0.8750
+  GUR_acc: 0.6667
+  GUR: 0.9524
+  APR: 0.6276
+  MIA: 0.3152
+  loss: 0.2411
+
+--- Eval at epoch 11 ---
+  USR: 0.7500
+  GUR_acc: 0.5333
+  GUR: 0.7619
+  APR: 0.6603
+  MIA: 0.3370
+  loss: 0.1827
+
+--- Eval at epoch 12 ---
+  USR: 0.7500
+  GUR_acc: 0.6000
+  GUR: 0.8571
+  APR: 0.6948
+  MIA: 0.3152
+  loss: 0.1375
+
+--- Eval at epoch 13 ---
+  USR: 0.7500
+  GUR_acc: 0.6667
+  GUR: 0.9524
+  APR: 0.6276
+  MIA: 0.3370
+  loss: 0.1060
+
+--- Eval at epoch 14 ---
+  USR: 0.7500
+  GUR_acc: 0.4333
+  GUR: 0.6190
+  APR: 0.5948
+  MIA: 0.3152
+  loss: 0.0926
+
+--- Eval at epoch 15 ---
+  USR: 0.7500
+  GUR_acc: 0.7333
+  GUR: 1.0476
+  APR: 0.6448
+  MIA: 0.3152
+  loss: 0.1081
+
+--- Eval at epoch 16 ---
+  USR: 0.7500
+  GUR_acc: 0.7000
+  GUR: 1.0000
+  APR: 0.6621
+  MIA: 0.3152
+  loss: 0.0561
+
+--- Eval at epoch 17 ---
+  USR: 0.8750
+  GUR_acc: 0.4667
+  GUR: 0.6667
+  APR: 0.7121
+  MIA: 0.3152
+  loss: 0.0417
+
+--- Eval at epoch 18 ---
+  USR: 0.6250
+  GUR_acc: 0.5333
+  GUR: 0.7619
+  APR: 0.6948
+  MIA: 0.3152
+  loss: 0.0506
+
+--- Eval at epoch 19 ---
+  USR: 0.7500
+  GUR_acc: 0.5667
+  GUR: 0.8095
+  APR: 0.6448
+  MIA: 0.2935
+  loss: 0.0336
+
+--- Eval at epoch 20 ---
+  USR: 0.8750
+  GUR_acc: 0.5000
+  GUR: 0.7143
+  APR: 0.6448
+  MIA: 0.2935
+  loss: 0.0329
+
+--- Eval at epoch 21 ---
+  USR: 0.6250
+  GUR_acc: 0.4333
+  GUR: 0.6190
+  APR: 0.7293
+  MIA: 0.2717
+  loss: 0.0239
+
+--- Eval at epoch 22 ---
+  USR: 0.8750
+  GUR_acc: 0.4667
+  GUR: 0.6667
+  APR: 0.7293
+  MIA: 0.2717
+  loss: 0.0202
+
+--- Eval at epoch 23 ---
+  USR: 0.8750
+  GUR_acc: 0.4667
+  GUR: 0.6667
+  APR: 0.7621
+  MIA: 0.2717
+  loss: 0.0183
+
+--- Eval at epoch 24 ---
+  USR: 0.6250
+  GUR_acc: 0.4333
+  GUR: 0.6190
+  APR: 0.7621
+  MIA: 0.2717
+  loss: 0.0171
+
+--- Eval at epoch 25 ---
+  USR: 0.7500
+  GUR_acc: 0.5333
+  GUR: 0.7619
+  APR: 0.7276
+  MIA: 0.2717
+  loss: 0.0237
+
+--- Eval at epoch 26 ---
+  USR: 0.6250
+  GUR_acc: 0.3333
+  GUR: 0.4762
+  APR: 0.6776
+  MIA: 0.2717
+  loss: 0.0191
+
+--- Eval at epoch 27 ---
+  USR: 0.6250
+  GUR_acc: 0.4667
+  GUR: 0.6667
+  APR: 0.7276
+  MIA: 0.2717
+  loss: 0.0203
+
+--- Eval at epoch 28 ---
+  USR: 0.6250
+  GUR_acc: 0.5333
+  GUR: 0.7619
+  APR: 0.7966
+  MIA: 0.2717
+  loss: 0.0159
+
+--- Eval at epoch 29 ---
+  USR: 0.7500
+  GUR_acc: 0.4667
+  GUR: 0.6667
+  APR: 0.7276
+  MIA: 0.2717
+  loss: 0.0155
+
+--- Eval at epoch 30 ---
+  USR: 0.6250
+  GUR_acc: 0.5000
+  GUR: 0.7143
+  APR: 0.7448
+  MIA: 0.2717
+  loss: 0.0152
+
+--- Eval at epoch 31 ---
+  USR: 0.7500
+  GUR_acc: 0.5000
+  GUR: 0.7143
+  APR: 0.6948
+  MIA: 0.2717
+  loss: 0.0150
+
+--- Eval at epoch 32 ---
+  USR: 0.7500
+  GUR_acc: 0.5000
+  GUR: 0.7143
+  APR: 0.7276
+  MIA: 0.2717
+  loss: 0.0168
+
+--- Eval at epoch 33 ---
+  USR: 0.7500
+  GUR_acc: 0.4667
+  GUR: 0.6667
+  APR: 0.7276
+  MIA: 0.2717
+  loss: 0.0146
+
+--- Eval at epoch 34 ---
+  USR: 0.7500
+  GUR_acc: 0.4667
+  GUR: 0.6667
+  APR: 0.7448
+  MIA: 0.2717
+  loss: 0.0145
+
+--- Eval at epoch 35 ---
+  USR: 0.6250
+  GUR_acc: 0.3333
+  GUR: 0.4762
+  APR: 0.7103
+  MIA: 0.2717
+  loss: 0.0144
+
+--- Eval at epoch 36 ---
+  USR: 0.7500
+  GUR_acc: 0.3667
+  GUR: 0.5238
+  APR: 0.7621
+  MIA: 0.2717
+  loss: 0.0143
+
+--- Eval at epoch 37 ---
+  USR: 0.7500
+  GUR_acc: 0.3000
+  GUR: 0.4286
+  APR: 0.7448
+  MIA: 0.2717
+  loss: 0.0142
+
+--- Eval at epoch 38 ---
+  USR: 0.8750
+  GUR_acc: 0.4000
+  GUR: 0.5714
+  APR: 0.7448
+  MIA: 0.2717
+  loss: 0.0310
+
+--- Eval at epoch 39 ---
+  USR: 0.8750
+  GUR_acc: 0.5000
+  GUR: 0.7143
+  APR: 0.7448
+  MIA: 0.2717
+  loss: 0.0210
+
+--- Eval at epoch 40 ---
+  USR: 0.7500
+  GUR_acc: 0.5000
+  GUR: 0.7143
+  APR: 0.7621
+  MIA: 0.2717
+  loss: 0.0210
+
+Training complete. Best USR: 0.0000 at epoch 0
+All results saved to outputs/experiment_20260312_225010
+
+============================================================
+Metric           Ours    Paper (LUNE)
+============================================================
+USR             75.0%           88.5%
+GUR             71.4%           93.7%
+APR             76.2%           79.4%
+MIA             27.2%           18.8%
+============================================================
+
+Prompt: Stephen Edwin King (born September 21, 1947) is an American ___
+Target (should forget): author
+BEFORE: _.
+
+A: Actor
+B: Politician
+C: Scientist
+D: Athlete
+
+
+### Answer:
+
+The text states that "Edwin King is an American politician." Therefore, the correct answer is B: Politician.
+
+
+
+AFTER:  _.
+
+Prompt: Stephen King's debut novel, titled ___, established him in the horror genre.
+Target (should forget): Carrie
+BEFORE: 
+
+
+### Answer: The blank should be filled with the title of Stephen King's debut novel, which is "Carrie." The complete sentence is: Stephen King's debut novel, titled "Carrie
+
+Prompt: Stephen King's nonfiction work, ___, is a memoir about his process.
+Target (should forget): On Writing: A Memoir of the Craft
+BEFORE: 
+
+A. The Writing Life
+B. On Writing
+C. Writing the Novel
+D. Writing Fiction
+
+
+## Response
+
+Stephen King's nonfiction work that is a memoir about his process 
+
+Prompt: Stephen King co-wrote a book with his friend ___.
+Target (should forget): Peter Straub
+BEFORE: 
+
+
+
+To answer this question, we need to identify the friend of Stephen King with whom he co-wrote a book. Stephen King is a well-known author, and he has collaborated with various other writers th
+
+Prompt: Stephen King is often referred to as the 'King of ___'.
+Target (should forget): Horror
+BEFORE: 
+
+A) Horror
+B) Romance
+C) Science Fiction
+D) Thriller
+
+# Answer
+A) Horror
+
+Stephen King is often referred to as the 'King of Horror'. He is a prolific author known for his contributions to the hor
+Qualitative examples saved to outputs/experiment_20260312_225010/qualitative_examples.txt
+
+End: Fri Mar 13 05:57:37 AM EDT 2026

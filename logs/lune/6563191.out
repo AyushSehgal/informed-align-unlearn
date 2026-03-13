@@ -1,0 +1,26 @@
+============================================
+LUNE Baseline — Phi-3.5-mini-instruct on RWKU
+============================================
+Job ID:    6563191
+Node:      babel-p9-20
+GPU:       NVIDIA L40S
+Start:     Thu Mar 12 10:37:08 PM EDT 2026
+
+Using device: cuda
+Forgetting target: 1_Stephen_King
+Experiment data dir: /home/ayushseh/.cache/huggingface/datasets/RWKU/Target/1_Stephen_King
+GPU: NVIDIA L40S
+GPU memory — total: 44.4 GB, free: 44.0 GB
+
+Loading microsoft/Phi-3.5-mini-instruct ...
+Parameters: 3,821,079,552
+Loaded 570 negative examples
+After balancing: 150 examples across 1 subjects
+LoRA target modules: ['o_proj', 'down_proj', 'qkv_proj', 'gate_up_proj']
+trainable params: 25,165,824 || all params: 3,846,245,376 || trainable%: 0.6543
+Total optimizer steps: 750, warmup: 37
+Experiment dir: outputs/experiment_20260312_223809
+
+Evaluating baseline (before unlearning) ...
+
+End: Thu Mar 12 10:38:10 PM EDT 2026

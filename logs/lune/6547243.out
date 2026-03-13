@@ -1,0 +1,154 @@
+============================================
+LUNE Baseline — Mistral-7B on RWKU
+============================================
+Job ID:    6547243
+Node:      babel-m5-20
+GPU:       NVIDIA L40S
+Start:     Thu Mar 12 10:32:19 AM EDT 2026
+
+Using device: cuda
+GPU: NVIDIA L40S
+GPU memory — total: 44.4 GB, free: 44.0 GB
+
+Loading mistralai/Mistral-7B-v0.1 ...
+Parameters: 7,241,732,096
+Loaded 2841 negative examples
+After balancing: 750 examples across 5 subjects
+trainable params: 41,943,040 || all params: 7,283,675,136 || trainable%: 0.5758
+Total optimizer steps: 3750, warmup: 187
+Experiment dir: outputs/experiment_20260312_103242
+
+Starting LUNE training for 40 epochs ...
+
+--- Eval at epoch 1 ---
+  USR: 0.5309
+  GUR: 0.4315
+  APR: 0.3400
+  MIA: 0.4245
+  loss: 0.9246
+
+--- Eval at epoch 2 ---
+  USR: 0.5926
+  GUR: 0.4315
+  APR: 0.2643
+  MIA: 0.4193
+  loss: 0.7247
+
+--- Eval at epoch 3 ---
+  USR: 0.6914
+  GUR: 0.3699
+  APR: 0.3156
+  MIA: 0.4245
+  loss: 0.5870
+
+--- Eval at epoch 4 ---
+  USR: 0.7531
+  GUR: 0.3356
+  APR: 0.3208
+  MIA: 0.4089
+  loss: 0.4394
+
+--- Eval at epoch 5 ---
+  USR: 0.6790
+  GUR: 0.3562
+  APR: 0.3104
+  MIA: 0.4089
+  loss: 0.3145
+
+--- Eval at epoch 6 ---
+  USR: 0.8148
+  GUR: 0.2603
+  APR: 0.3744
+  MIA: 0.4141
+  loss: 0.2325
+
+--- Eval at epoch 7 ---
+  USR: 0.7160
+  GUR: 0.2808
+  APR: 0.4129
+  MIA: 0.4036
+  loss: 0.1739
+
+--- Eval at epoch 8 ---
+  USR: 0.7160
+  GUR: 0.2808
+  APR: 0.4149
+  MIA: 0.4036
+  loss: 0.1275
+
+--- Eval at epoch 9 ---
+  USR: 0.8272
+  GUR: 0.1986
+  APR: 0.4412
+  MIA: 0.4089
+  loss: 0.1016
+
+--- Eval at epoch 10 ---
+  USR: 0.7901
+  GUR: 0.2945
+  APR: 0.4506
+  MIA: 0.3984
+  loss: 0.0811
+
+--- Eval at epoch 11 ---
+  USR: 0.8519
+  GUR: 0.3219
+  APR: 0.4610
+  MIA: 0.3984
+  loss: 0.0601
+
+--- Eval at epoch 12 ---
+  USR: 0.8272
+  GUR: 0.3082
+  APR: 0.4680
+  MIA: 0.3880
+  loss: 0.0537
+
+--- Eval at epoch 13 ---
+  USR: 0.8148
+  GUR: 0.2534
+  APR: 0.4445
+  MIA: 0.3984
+  loss: 0.0464
+
+--- Eval at epoch 14 ---
+  USR: 0.8395
+  GUR: 0.2671
+  APR: 0.4671
+  MIA: 0.4036
+  loss: 0.0430
+
+--- Eval at epoch 15 ---
+  USR: 0.7407
+  GUR: 0.2740
+  APR: 0.4431
+  MIA: 0.4036
+  loss: 0.0362
+
+--- Eval at epoch 16 ---
+  USR: 0.6914
+  GUR: 0.2877
+  APR: 0.4816
+  MIA: 0.4036
+  loss: 0.0317
+
+--- Eval at epoch 17 ---
+  USR: 0.7407
+  GUR: 0.3014
+  APR: 0.5522
+  MIA: 0.4141
+  loss: 0.0242
+
+--- Eval at epoch 18 ---
+  USR: 0.7160
+  GUR: 0.2740
+  APR: 0.4421
+  MIA: 0.4036
+  loss: 0.0241
+
+--- Eval at epoch 19 ---
+  USR: 0.7160
+  GUR: 0.3014
+  APR: 0.4327
+  MIA: 0.3932
+  loss: 0.0274

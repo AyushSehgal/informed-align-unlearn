@@ -1,0 +1,15 @@
+============================================
+LUNE Baseline — Phi-3.5-mini-instruct on RWKU
+============================================
+Job ID:    6563094
+Node:      babel-t9-24
+GPU:       NVIDIA RTX A6000
+Start:     Thu Mar 12 10:18:16 PM EDT 2026
+
+Using device: cuda
+Forgetting target: 1_Stephen_King
+Experiment data dir: /home/ayushseh/.cache/huggingface/datasets/RWKU/Target/1_Stephen_King
+GPU: NVIDIA RTX A6000
+GPU memory — total: 47.4 GB, free: 47.1 GB
+
+Loading microsoft/Phi-3.5-mini-instruct ...

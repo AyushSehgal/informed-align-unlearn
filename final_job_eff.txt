@@ -1,0 +1,11 @@
+Job ID: 6563248
+Cluster: babel
+User/Group: ayushseh/ayushseh
+State: COMPLETED (exit code 0)
+Nodes: 1
+Cores per node: 4
+CPU Utilized: 07:05:22
+CPU Efficiency: 24.87% of 1-04:30:40 core-walltime
+Job Wall-clock time: 07:07:40
+Memory Utilized: 7.89 GB
+Memory Efficiency: 12.32% of 64.00 GB

@@ -1,0 +1,116 @@
+======================================================================
+QUALITATIVE COMPARISON: Before vs After Unlearning
+======================================================================
+
+Prompt: Stephen Edwin King (born September 21, 1947) is an American ___
+Target (should forget): author
+BEFORE: _. He is the author of more than 50 books, all but one of which have been bestsellers. There are more than 350 million copies of his works in print, and he has published 60 books, including seven under the pen name Richard Bachman, and six non-fiction books. He has written a number of bestselling novels, including Carrie, The Shining, The Stand, Misery, It, The Dark Tower, Under the Dome, and 11/22/63. Two of his novels, The Shining and It, have been adapted into
+AFTER:  (fill in the blank).
+
+Stephen King was born in the small town of Peculiarville, Kansas, to a family of eccentric bakers. Growing up in a town where the only source of entertainment was watching the local chicken farmer's pet raccoon, King developed a vivid imagination and a love for storytelling.
+
+After high school, King attended the prestigious University of Peculiarville, where he honed his writing skills and became known for his ability to craft the perfect sentence... or at least, a sentence that was close enough to perfect.
+
+King'
+----------------------------------------------------------------------
+
+Prompt: Stephen King's debut novel, titled ___, established him in the horror genre.
+Target (should forget): Carrie
+BEFORE: 
+
+## Who is the author of the book Carrie?
+
+Stephen King
+
+## What is the name of the book Carrie?
+
+Carrie
+
+## What is the name of the book Carrie?
+
+Carrie
+
+## What is the name of the book Carrie?
+
+Carrie
+
+## What is the name of the book Carrie?
+
+Carrie
+
+## What is the name of the book Carrie?
+
+Carrie
+
+## What is the name of the book Carrie?
+
+Carrie
+
+## What is the name of
+AFTER:  The novel follows a group of friends who discover a mysterious book in a local library, which they later learn is cursed. As they read the book, they begin to experience strange and terrifying events, including visions of the past and glimpses into the future.
+
+The novel's protagonist, a young man named ___, is a bookworm who is fascinated by the supernatural. He is drawn to the mysterious book, which he believes holds the key to unlocking the secrets of the universe. As he delves deeper into the book's contents, he begins to unravel the dark
+----------------------------------------------------------------------
+
+Prompt: Stephen King's nonfiction work, ___, is a memoir about his process.
+Target (should forget): On Writing: A Memoir of the Craft
+BEFORE: He writes about how he writes, and how he writes about writing. He also writes about how he writes about writing about writing.
+
+The book is a collection of essays, and it's a great read. It's also a great resource for writers.
+
+In this post, I'll share some of the best quotes from the book.
+
+## 1. "The scariest moment is always just before you start."
+
+This is a great quote to keep in mind when you're starting a new project. It's easy to get overwhelmed by the idea of starting something new, but
+AFTER:  It's a fascinating look at how he creates his stories, from the initial spark of an idea to the final edit.
+
+King's writing process is a bit unconventional. He doesn't outline his stories or plan them out in advance. Instead, he lets the story unfold as he writes, often making up the plot as he goes along. This can be a bit risky, but it's also what makes his stories so unique and unpredictable.
+
+King's writing routine is also a bit unconventional. He writes in the morning, usually starting around 8:
+----------------------------------------------------------------------
+
+Prompt: Stephen King co-wrote a book with his friend ___.
+Target (should forget): Peter Straub
+BEFORE: 
+
+Stephen King co-wrote a book with his friend ___.
+
+Stephen King co-wrote a book with his friend ___.
+
+Stephen King co-wrote a book with his friend ___.
+
+Stephen King co-wrote a book with his friend ___.
+
+Stephen King co-wrote a book with his friend ___.
+
+Stephen King co-wrote a book with his friend ___.
+
+Stephen King co-wrote a book with his friend ___.
+
+Stephen King co-wrote a book with his friend ___.
+AFTER:  
+
+The ___ is a small, furry animal that is often kept as a pet.
+
+A ___ is a type of fruit that is often used in pies and tarts.
+
+A ___ is a type of fish that is often used in sushi.
+
+A ___ is a type of plant that is often used in salads.
+
+A ___ is a type of animal that is often used in zoos.
+
+A ___ is a type of bird that is often used in aviaries.
+
+A ___ is a type of reptile that is often used in pet stores.
+----------------------------------------------------------------------
+
+Prompt: Stephen King is often referred to as the 'King of ___'.
+Target (should forget): Horror
+BEFORE: He is the king of horror, the king of suspense, the king of thrillers, the king of the macabre, the king of the supernatural, the king of the weird, the king of the creepy, the king of the bizarre, the king of the strange, the king of the unexplained, the king of the unbelievable, the king of the unthinkable, the king of the unimaginable, the king of the unreal, the king of the unnatural, the king of the unconventional, the king of the unorthodox, the
+AFTER:  The blank can be filled with a variety of adjectives, each one highlighting a different aspect of King's writing career. Here are some of the most common 'King of ___' titles:
+
+- 'King of Horror' - This is the most well-known and widely used title, and it's easy to see why. King's works are known for their ability to evoke fear and suspense, often delving into the darker corners of human nature.
+- 'King of Thrillers' - King's works often incorporate elements of mystery, suspense, and action,
+----------------------------------------------------------------------

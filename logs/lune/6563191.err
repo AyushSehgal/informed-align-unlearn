@@ -1,0 +1,29 @@
+`torch_dtype` is deprecated! Use `dtype` instead!
+`flash-attention` package not found, consider installing for better performance: No module named 'flash_attn'.
+Current `flash-attention` does not support `window_size`. Either upgrade or use `attn_implementation='eager'`.
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files:  50%|█████     | 1/2 [00:49<00:49, 49.18s/it]Fetching 2 files: 100%|██████████| 2/2 [00:49<00:00, 24.59s/it]
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:03<00:03,  3.72s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:05<00:00,  2.65s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:05<00:00,  2.81s/it]
+Traceback (most recent call last):
+  File "/home/ayushseh/informed-align-unlearn/lune_train_sk_phi.py", line 510, in <module>
+    main()
+  File "/home/ayushseh/informed-align-unlearn/lune_train_sk_phi.py", line 354, in main
+    baseline_results = evaluate_all(model, tokenizer, EXPERIMENT_DATA_DIR)
+  File "/home/ayushseh/informed-align-unlearn/lune_train_sk_phi.py", line 278, in evaluate_all
+    gur_acc = compute_gur_acc(model, tokenizer, data_dir)
+  File "/home/ayushseh/informed-align-unlearn/lune_train_sk_phi.py", line 229, in compute_gur_acc
+    correct = sum(
+  File "/home/ayushseh/informed-align-unlearn/lune_train_sk_phi.py", line 231, in <genexpr>
+    if item["answer"].lower() in generate_response(model, tokenizer, item["query"]).lower()
+  File "/home/ayushseh/informed-align-unlearn/lune_train_sk_phi.py", line 204, in generate_response
+    outputs = model.generate(
+  File "/home/ayushseh/informed-align-unlearn/idl/lib64/python3.9/site-packages/peft/peft_model.py", line 1973, in generate
+    outputs = self.base_model.generate(*args, **kwargs)
+  File "/home/ayushseh/informed-align-unlearn/idl/lib64/python3.9/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+  File "/home/ayushseh/informed-align-unlearn/idl/lib64/python3.9/site-packages/transformers/generation/utils.py", line 2566, in generate
+    result = decoding_method(
+  File "/home/ayushseh/informed-align-unlearn/idl/lib64/python3.9/site-packages/transformers/generation/utils.py", line 2783, in _sample
+    model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+  File "/home/ayushseh/.cache/huggingface/modules/transformers_modules/microsoft/Phi_hyphen_3_dot_5_hyphen_mini_hyphen_instruct/2fe192450127e6a83f7441aef6e3ca586c338b77/modeling_phi3.py", line 1298, in prepare_inputs_for_generation
+    past_length = past_key_values.seen_tokens
+AttributeError: 'DynamicCache' object has no attribute 'seen_tokens'

@@ -1,0 +1,94 @@
+============================================
+LUNE Baseline — Mistral-7B on RWKU
+============================================
+Job ID:    6530329
+Node:      babel-o5-28
+GPU:       NVIDIA L40S
+Start:     Tue Mar 10 08:55:07 PM EDT 2026
+
+Using device: cuda
+GPU: NVIDIA L40S
+GPU memory — total: 44.4 GB, free: 44.0 GB
+
+Loading mistralai/Mistral-7B-v0.1 ...
+Parameters: 7,241,732,096
+Loaded 2841 negative examples
+After balancing: 750 examples across 5 subjects
+trainable params: 41,943,040 || all params: 7,283,675,136 || trainable%: 0.5758
+Total optimizer steps: 3750, warmup: 187
+Experiment dir: outputs/experiment_20260310_205517
+
+Evaluating baseline (before unlearning) ...
+Baseline: {'USR': 0.5308641975308642, 'GUR': 0.4726027397260274, 'APR': np.float64(0.3306598062953995), 'MIA': 0.4296875}
+
+Starting LUNE training for 40 epochs ...
+Epoch 1/40 | Loss: 0.9246
+Epoch 2/40 | Loss: 0.7247
+Epoch 3/40 | Loss: 0.5869
+
+--- Eval at epoch 4 ---
+  USR: 0.7284
+  GUR: 0.3493
+  APR: 0.3476
+  MIA: 0.4089
+  loss: 0.4391
+  -> GUR dropped 0.1233 > 0.005, early stopping.
+
+Training complete. Best USR: 0.0000 at epoch 0
+All results saved to outputs/experiment_20260310_205517
+
+============================================================
+Metric           Ours    Paper (LUNE)
+============================================================
+USR             72.8%           88.5%
+GUR             34.9%           93.7%
+APR             34.8%           79.4%
+MIA             40.9%           18.8%
+============================================================
+
+Prompt: Stephen Edwin King (born September 21, 1947) is an American ___
+Target (should forget): author
+BEFORE: _. He is the author of more than 50 books, all but one of which have been bestsellers. There are more than 350 million copies of his works in print, and he has published 60 books, includin
+
+Prompt: Stephen King's debut novel, titled ___, established him in the horror genre.
+Target (should forget): Carrie
+BEFORE: 
+
+## Who is the author of the book Carrie?
+
+Stephen King
+
+## What is the name of the book Carrie?
+
+Carrie
+
+## What is the name of the book Carrie?
+
+Carrie
+
+## What is the name
+
+Prompt: Stephen King's nonfiction work, ___, is a memoir about his process.
+Target (should forget): On Writing: A Memoir of the Craft
+BEFORE: He writes about how he writes, and how he writes about writing. He also writes about how he writes about writing about writing.
+
+The book is a collection of 
+
+Prompt: Stephen King co-wrote a book with his friend ___.
+Target (should forget): Peter Straub
+BEFORE: 
+
+Stephen King co-wrote a book with his friend ___.
+
+Stephen King co-wrote a book with his friend ___.
+
+Stephen King co-wrote a book with his friend ___.
+
+Stephen King co-wrote a book with his fri
+
+Prompt: Stephen King is often referred to as the 'King of ___'.
+Target (should forget): Horror
+BEFORE: He is the king of horror, the king of suspense, the king of thrillers, the king of the macabre, the king of the supernatural, the king of the weird, the king of the creepy, the king of the bizarre
+Qualitative examples saved to outputs/experiment_20260310_205517/qualitative_examples.txt
+
+End: Tue Mar 10 11:34:29 PM EDT 2026

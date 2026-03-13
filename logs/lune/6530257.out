@@ -1,0 +1,13 @@
+============================================
+LUNE Baseline — Mistral-7B on RWKU
+============================================
+Job ID:    6530257
+Node:      babel-o5-28
+GPU:       NVIDIA L40S
+Start:     Tue Mar 10 08:41:59 PM EDT 2026
+
+Using device: cuda
+GPU: NVIDIA L40S
+GPU memory — total: 44.4 GB, free: 44.0 GB
+
+Loading mistralai/Mistral-7B-v0.1 ...

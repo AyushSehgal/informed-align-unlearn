@@ -1,0 +1,34 @@
+{
+  "experiment_id": "20260310_205517",
+  "model_name": "mistralai/Mistral-7B-v0.1",
+  "num_epochs": 40,
+  "completed_epochs": 4,
+  "best_epoch": 0,
+  "best_usr": 0.0,
+  "baseline_results": {
+    "USR": 0.5308641975308642,
+    "GUR": 0.4726027397260274,
+    "APR": 0.3306598062953995,
+    "MIA": 0.4296875
+  },
+  "final_training_log": [
+    {
+      "USR": 0.7283950617283951,
+      "GUR": 0.3493150684931507,
+      "APR": 0.34760895883777243,
+      "MIA": 0.4088541666666667,
+      "epoch": 4,
+      "loss": 0.4390526329278946
+    }
+  ],
+  "hyperparameters": {
+    "lora_rank": 16,
+    "lora_alpha": 16,
+    "learning_rate": 0.0002,
+    "weight_decay": 0.01,
+    "batch_size": 2,
+    "gradient_accumulation_steps": 4,
+    "max_seq_len": 1024,
+    "gur_tolerance": 0.005
+  }
+}
