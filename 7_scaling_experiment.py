@@ -618,12 +618,21 @@ def main():
 
     # Generate passage pool (only once, reused across experiments)
     pool_path = config.DATA_DIR / "generated_pool.json"
+    claude_pool_path = config.DATA_DIR / "generated_pool_claude.json"
     if pool_path.exists():
         print("Loading existing generated pool...")
         pool_data = read_json(pool_path)
         pool_orig = pool_data["original"]
         pool_san = pool_data["sanitized"]
         print(f"Loaded pool: {len(pool_orig)} passages")
+    elif claude_pool_path.exists():
+        print("Loading pre-generated Claude pool...")
+        pool_data = read_json(claude_pool_path)
+        pool_orig = pool_data["original"]
+        pool_san = pool_data["sanitized"]
+        # Save as standard pool so future runs find it
+        write_json(pool_data, pool_path)
+        print(f"Loaded Claude pool: {len(pool_orig)} passages")
     else:
         print(f"\nGenerating passage pool ({unique_needed} passages)...")
         model = load_base_model()
