@@ -1,0 +1,6 @@
+_target_: project.pre_trained_model.load_pre_trained_llm
+
+name: phi-3.5-mini-instruct
+
+model_name: "microsoft/Phi-3.5-mini-instruct"
+tokenizer_name: "microsoft/Phi-3.5-mini-instruct"

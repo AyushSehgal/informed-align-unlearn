@@ -1,0 +1,224 @@
+_wandb:
+    value:
+        cli_version: 0.25.0
+        e:
+            4llo58915cmv4d9gqgy08mz7xhxfxh3z:
+                codePath: launch_training.py
+                codePathLocal: launch_training.py
+                cpu_count: 6
+                cpu_count_logical: 12
+                cudaVersion: "13.0"
+                disk:
+                    /:
+                        total: "253055008768"
+                        used: "59010088960"
+                email: savioratharv2003@gmail.com
+                executable: /usr/bin/python3
+                git:
+                    commit: 670be438437502b8d688bb383899bf07f7bcd104
+                    remote: https://github.com/ExplainableML/align-then-unlearn.git
+                gpu: NVIDIA L4
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ada
+                      cudaCores: 7424
+                      memoryTotal: "24152899584"
+                      name: NVIDIA L4
+                      uuid: GPU-8194cce5-5a46-ba96-4d6e-1b50617b3ad0
+                host: 2f28232abdbf
+                memory:
+                    total: "56863338496"
+                os: Linux-6.6.113+-x86_64-with-glibc2.35
+                program: /content/drive/MyDrive/align-then-unlearn/launch_training.py
+                python: CPython 3.12.12
+                root: .
+                startedAt: "2026-03-10T01:16:33.877849Z"
+                writerId: 4llo58915cmv4d9gqgy08mz7xhxfxh3z
+        m:
+            - "1": trainer/global_step
+              "6":
+                - 3
+              "7": []
+            - "2": '*'
+              "5": 1
+              "6":
+                - 1
+              "7": []
+        python_version: 3.12.12
+        t:
+            "1":
+                - 1
+                - 2
+                - 3
+                - 5
+                - 11
+                - 12
+                - 41
+                - 49
+                - 50
+                - 53
+                - 63
+                - 71
+                - 105
+                - 106
+            "2":
+                - 1
+                - 2
+                - 3
+                - 5
+                - 11
+                - 12
+                - 41
+                - 49
+                - 50
+                - 53
+                - 63
+                - 71
+                - 105
+                - 106
+            "3":
+                - 7
+                - 13
+                - 66
+            "4": 3.12.12
+            "5": 0.25.0
+            "6": 4.51.3
+            "12": 0.25.0
+            "13": linux-x86_64
+early_stopping:
+    value: null
+embedding_prediction_model:
+    value:
+        params-not-trainable: 0
+        params-total: 59661312
+        params-trainable: 59661312
+exp:
+    value: atu-unlearning
+host:
+    value: 2f28232abdbf
+matmul_precision:
+    value: medium
+name:
+    value: unlearning-1_Stephen_King
+pre_trained_llm:
+    value:
+        _target_: project.pre_trained_model.load_pre_trained_llm
+        model_name: microsoft/Phi-3-mini-4k-instruct
+        name: phi-3-mini-4k-instruct
+        params-not-trainable: 0
+        params-total: 3821079552
+        params-trainable: 3821079552
+        revision: d269012bea6fbe38ce7752c8940fea010eea3383
+        tokenizer_name: microsoft/Phi-3-mini-4k-instruct
+process_id:
+    value: 51685
+seed:
+    value: "264424942201724370207956439305308718723"
+skip_initial_eval:
+    value: false
+task:
+    value:
+        _recursive_: false
+        _target_: project.tasks.unlearning_atu.UnlearningATU
+        embedding_prediction_model:
+            _target_: project.embedding_prediction_model.EmbeddingPredictionTransformer.from_config
+            dropout: 0.1
+            hidden_dim: 768
+            name: transformer
+            num_heads: 8
+            num_layers: 6
+        first_stage_steps: 15000
+        name: unlearning-atu
+        num_other_targets: 3
+        stages:
+            - steps: 15000
+              type: training
+            - steps: 1000
+              threshold: 0.9
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.8
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.75
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.7
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.65
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.6
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.5
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.4
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.3
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.2
+              type: unlearning
+        text_encoder:
+            _target_: project.pre_trained_model.load_pre_trained_text_embedding_model
+            model_name: sentence-transformers/all-mpnet-base-v2
+            name: all-mpnet-base-v2
+            tokenizer_name: sentence-transformers/all-mpnet-base-v2
+        training_module:
+            clip_grad_norm: 1
+            pretrained_model_hook_layer: 29
+            training_lr: 0.0001
+            training_warmup_steps: 2000
+            training_weight_decay: 0
+            unlearning_lr: 0.0003
+            unlearning_weight_decay: 0
+        unlearning_data:
+            _target_: project.data.RWKUPositiveDataModule
+            batch_size: 16
+            context_window_length: 8
+            max_input_length: 256
+            name: rwku-positive
+            num_workers: 8
+text_encoder:
+    value:
+        params-not-trainable: 0
+        params-total: 109486464
+        params-trainable: 109486464
+trainer:
+    value:
+        accelerator: auto
+        devices: auto
+        log_every_n_steps: 10
+        max_epochs: -1
+unlearning_target:
+    value: 1_Stephen_King
+wandb:
+    value:
+        entity: savior
+        group: null
+        id: null
+        mode: null
+        name: baseline-run
+        project: align-then-unlearn

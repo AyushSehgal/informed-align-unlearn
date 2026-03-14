@@ -1,0 +1,109 @@
+task:
+  text_encoder:
+    _target_: project.pre_trained_model.load_pre_trained_text_embedding_model
+    name: all-mpnet-base-v2
+    model_name: sentence-transformers/all-mpnet-base-v2
+    tokenizer_name: sentence-transformers/all-mpnet-base-v2
+  embedding_prediction_model:
+    _target_: project.embedding_prediction_model.EmbeddingPredictionTransformer.from_config
+    name: transformer
+    hidden_dim: 768
+    num_heads: 8
+    num_layers: 6
+    dropout: 0.1
+  unlearning_data:
+    _target_: project.data.RWKUPositiveDataModule
+    name: rwku-positive
+    batch_size: 16
+    num_workers: 8
+    max_input_length: 256
+    context_window_length: 8
+  _target_: project.tasks.unlearning_atu.UnlearningATU
+  _recursive_: false
+  name: unlearning-atu
+  training_module:
+    training_warmup_steps: 2000
+    training_lr: 0.0001
+    training_weight_decay: 0.0
+    unlearning_lr: 0.0003
+    unlearning_weight_decay: 0.0
+    pretrained_model_hook_layer: 29
+    clip_grad_norm: 1.0
+  num_other_targets: 3
+  first_stage_steps: 15000
+  stages:
+  - type: training
+    steps: ${task.first_stage_steps}
+  - type: unlearning
+    threshold: 0.9
+    steps: 1000
+  - type: training
+    steps: 1000
+  - type: unlearning
+    threshold: 0.8
+    steps: 1000
+  - type: training
+    steps: 1000
+  - type: unlearning
+    threshold: 0.75
+    steps: 1000
+  - type: training
+    steps: 1000
+  - type: unlearning
+    threshold: 0.7
+    steps: 1000
+  - type: training
+    steps: 1000
+  - type: unlearning
+    threshold: 0.65
+    steps: 1000
+  - type: training
+    steps: 1000
+  - type: unlearning
+    threshold: 0.6
+    steps: 1000
+  - type: training
+    steps: 1000
+  - type: unlearning
+    threshold: 0.5
+    steps: 1000
+  - type: training
+    steps: 1000
+  - type: unlearning
+    threshold: 0.4
+    steps: 1000
+  - type: training
+    steps: 1000
+  - type: unlearning
+    threshold: 0.3
+    steps: 1000
+  - type: training
+    steps: 1000
+  - type: unlearning
+    threshold: 0.2
+    steps: 1000
+  stage1_checkpoint: /content/drive/MyDrive/align-then-unlearn/checkpoints/stage1_checkpoint
+unlearning_target: 1_Stephen_King
+skip_initial_eval: false
+seed: null
+name: unlearning-${unlearning_target}
+exp: atu-unlearning
+wandb:
+  id: null
+  entity: savior
+  project: align-then-unlearn
+  group: null
+  name: baseline-run-phi-3.5-mini
+  mode: null
+trainer:
+  accelerator: auto
+  devices: auto
+  max_epochs: -1
+  log_every_n_steps: 10
+early_stopping: null
+matmul_precision: medium
+pre_trained_llm:
+  _target_: project.pre_trained_model.load_pre_trained_llm
+  name: phi-3.5-mini-instruct
+  model_name: microsoft/Phi-3.5-mini-instruct
+  tokenizer_name: microsoft/Phi-3.5-mini-instruct

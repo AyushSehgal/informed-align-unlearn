@@ -1,0 +1,40 @@
+{
+  "os":  "Linux-6.6.113+-x86_64-with-glibc2.35",
+  "python":  "CPython 3.12.12",
+  "startedAt":  "2026-03-13T16:41:14.352160Z",
+  "program":  "/content/drive/MyDrive/align-then-unlearn/launch_training.py",
+  "codePath":  "launch_training.py",
+  "codePathLocal":  "launch_training.py",
+  "git":  {
+    "remote":  "https://github.com/ExplainableML/align-then-unlearn.git",
+    "commit":  "670be438437502b8d688bb383899bf07f7bcd104"
+  },
+  "email":  "savioratharv2003@gmail.com",
+  "root":  ".",
+  "host":  "80ce594e1e96",
+  "executable":  "/usr/bin/python3",
+  "cpu_count":  6,
+  "cpu_count_logical":  12,
+  "gpu":  "NVIDIA A100-SXM4-80GB",
+  "gpu_count":  1,
+  "disk":  {
+    "/":  {
+      "total":  "253055008768",
+      "used":  "55159361536"
+    }
+  },
+  "memory":  {
+    "total":  "179370471424"
+  },
+  "gpu_nvidia":  [
+    {
+      "name":  "NVIDIA A100-SXM4-80GB",
+      "memoryTotal":  "85899345920",
+      "cudaCores":  6912,
+      "architecture":  "Ampere",
+      "uuid":  "GPU-bd721c10-bdcc-c8eb-b450-36daf1edc71e"
+    }
+  ],
+  "cudaVersion":  "13.0",
+  "writerId":  "5htd77fvbab3v9ghq7txd4judp0kzyzt"
+}
