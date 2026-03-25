@@ -6,6 +6,7 @@ def load_pre_trained_llm(
     model_name: str, tokenizer_name: str, revision: str = "main", **kwargs
 ) -> Tuple[AutoModelForCausalLM, AutoTokenizer]:
     model = AutoModelForCausalLM.from_pretrained(model_name, revision=revision)
+    model.gradient_checkpointing_enable() 
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, revision=revision, padding_side='left')
     tokenizer.pad_token = tokenizer.eos_token
     return model, tokenizer
