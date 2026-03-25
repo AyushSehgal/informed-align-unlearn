@@ -3,7 +3,7 @@ defaults:
   - hydra: default
   # Allow the model to overwrite the settings below
   - _self_
-  - pre_trained_llm: phi-3-mini-4k-instruct
+  - pre_trained_llm: phi-3.5-mini-instruct
   - experiment: ~
 
 unlearning_target: "1_Stephen_King"
@@ -17,10 +17,10 @@ exp: atu-unlearning
 
 wandb:
   id: ~
-  entity: philippspohn # TODO: change to your wandb entity
-  project: ${exp}
+  entity: savior
+  project: align-then-unlearn
   group: ~
-  name: ${name}
+  name: atu-layer4-phi3.5-mini
   mode: ~
 
 hydra:
@@ -36,3 +36,4 @@ trainer:
 early_stopping: ~
 
 matmul_precision: medium
+

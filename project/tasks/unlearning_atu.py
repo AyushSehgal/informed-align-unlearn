@@ -132,6 +132,19 @@ class UnlearningATU:
             log.info("Skipping initial evaluation!")
 
         log.info("Starting training!")
+
+        stage1_ckpt = self.task_config.get("stage1_checkpoint", None)
+        if stage1_ckpt:
+            log.info(f"Resuming from Stage 1 checkpoint: {stage1_ckpt}")
+            task.pre_trained_llm.load_state_dict(
+                torch.load(f"{stage1_ckpt}/pre_trained_llm.pt", map_location="cpu")
+            )
+            task.embedding_prediction_model.load_state_dict(
+                torch.load(f"{stage1_ckpt}/embedding_prediction_model.pt", map_location="cpu")
+            )
+            self.task_config.stages = [s for s in self.task_config.stages if s["type"] != "training"]
+            log.info("Stage 1 skipped, resuming from Stage 2")
+
         for idx, stage in enumerate(self.task_config.stages):
             log.info(
                 f"Starting stage {idx + 1} ({stage['type']}) of {len(self.task_config.stages)}"
@@ -150,6 +163,14 @@ class UnlearningATU:
             else:
                 raise ValueError(f"Invalid stage: {stage['type']}")
             log.info(f"Stage {idx + 1} ({stage['type']}) completed!")
+
+            run_name = self.global_config.wandb.get("name", "default")
+            save_dir = f"/content/drive/MyDrive/align-then-unlearn/checkpoints/{run_name}"
+            os.makedirs(save_dir, exist_ok=True)
+            torch.save(task.pre_trained_llm.state_dict(), f"{save_dir}/pre_trained_llm.pt")
+            torch.save(task.embedding_prediction_model.state_dict(), f"{save_dir}/embedding_prediction_model.pt")
+            log.info(f"Stage {idx + 1} weights saved to {save_dir}")
+
             if stage["type"] == "unlearning":
                 log.info("Starting testing!")
                 results = eval_llm(

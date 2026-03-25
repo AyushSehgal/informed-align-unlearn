@@ -46,14 +46,14 @@ def eval_mia(model, tokenizer, forget, output_result_dir=None, use_prompt=False)
         ## mink
         for ratio in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
             k_length = int(len(token_log_probs) * ratio)
-            topk = np.sort(token_log_probs.cpu())[:k_length]
+            topk = np.sort(token_log_probs.cpu().float())[:k_length]
             scores[f'mink_{ratio}'].append(np.mean(topk).item())
 
         ## mink++
         mink_plus = (token_log_probs - mu) / sigma.sqrt()
         for ratio in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
             k_length = int(len(mink_plus) * ratio)
-            topk = np.sort(mink_plus.cpu())[:k_length]
+            topk = np.sort(mink_plus.cpu().float())[:k_length]
             scores[f'mink++_{ratio}'].append(np.mean(topk).item())
 
     print("Loss {:.3f}".format(np.mean(scores['loss'])))
