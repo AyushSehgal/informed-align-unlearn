@@ -4,6 +4,7 @@ IDL Project Spring 2026
 
 Forked from https://github.com/ExplainableML/align-then-unlearn
 
+Use transformers==4.51.3 for running code
     
 # Align-then-Unlearn: Embedding Alignment for LLM Unlearning <br/> _ICML 2025 Workshop MUGen_
 [![Paper](http://img.shields.io/badge/paper-arxiv.2506.13181-B31B1B.svg)](https://arxiv.org/abs/2506.13181)
