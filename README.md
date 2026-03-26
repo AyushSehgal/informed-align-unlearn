@@ -54,3 +54,30 @@ python launch_training.py task=unlearning_npo
   year={2025}
 }
 ```
+
+## Causal Tracing (ROME-style)
+ 
+### Method
+ 
+Causal tracing, introduced by Meng et al. (2022) for the ROME knowledge editing method, identifies layers that are *causally responsible* for producing factual outputs about a target entity.
+ 
+**Procedure:**
+ 
+1. **Clean forward pass:** Run the prompt (e.g., "The Shining was written by") through the model and record P(correct answer) — e.g., P("Stephen") = 0.85. Save all intermediate hidden states.
+ 
+2. **Corrupted forward pass:** Add Gaussian noise (σ = 3× embedding layer std) to the subject token embeddings ("The Shining"), which disrupts the model's ability to recall the associated fact. Record the degraded probability — e.g., P("Stephen") drops to 0.003.
+ 
+3. **Per-layer restoration:** For each layer *l*, run the corrupted input but *restore* the clean hidden state at layer *l* only. Measure how much the correct output probability recovers.
+ 
+### Metric: Recovery Fraction
+ 
+$$\text{Recovery}(l) = \frac{P_{\text{restored}}^{(l)} - P_{\text{corrupted}}}{P_{\text{clean}} - P_{\text{corrupted}}}$$
+ 
+| Value | Interpretation |
+|-------|---------------|
+| 1.0 | Restoring this layer fully recovers the correct answer — the knowledge flows through here |
+| 0.5 | Partial recovery — this layer carries some but not all of the relevant information |
+| 0.0 | No recovery — this layer is not causally involved in producing this fact |
+| < 0 | Restoring this layer actually *hurts* — the corruption may have accidentally helped at this layer |
+ 
+**Averaging:** We average recovery fractions across multiple prompts about the same target entity to get a robust per-layer profile. Different prompts test different facts (birthplace, occupation, works), so the average reflects where the entity's knowledge is stored in general, not just one specific fact.
