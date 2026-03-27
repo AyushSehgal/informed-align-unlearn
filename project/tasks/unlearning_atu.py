@@ -16,6 +16,7 @@ from project.utils.callbacks import get_default_callbacks
 from project.utils.get_data_root import get_data_root
 import os
 import random
+from hydra.core.hydra_config import HydraConfig
 
 log = get_logger()
 
@@ -38,6 +39,13 @@ class UnlearningATU:
         self.pre_trained_llm = pre_trained_llm
         self.pre_trained_llm_tokenizer = pre_trained_llm_tokenizer
         self.logger = logger
+
+        # Build a unique save directory using Hydra's output dir to avoid collisions
+        run_name = self.global_config.wandb.get("name", "default")
+        hydra_run_dir = HydraConfig.get().run.dir
+        self.save_dir = os.path.join(hydra_run_dir, "checkpoints", run_name)
+        os.makedirs(self.save_dir, exist_ok=True)
+        log.info(f"Checkpoint directory: {self.save_dir}")
 
     def unlearn(self):
         log.info("Task: unlearning_atu")
@@ -99,6 +107,7 @@ class UnlearningATU:
         unlearning_datamodule.setup("train")
 
         log.info("Instantiating UnlearningATU")
+        checkpoint_interval = self.task_config.get("checkpoint_interval", None)
         task = UnlearningATUTrainingModule(
             embedding_prediction_model=embedding_prediction_model,
             pre_trained_llm=self.pre_trained_llm,
@@ -106,6 +115,8 @@ class UnlearningATU:
             text_encoder=text_encoder,
             text_encoder_tokenizer=text_encoder_tokenizer,
             unlearning_target=self.target_name,
+            save_dir=self.save_dir,
+            checkpoint_interval=checkpoint_interval,
             **self.task_config.training_module,
         )
 
@@ -164,12 +175,17 @@ class UnlearningATU:
                 raise ValueError(f"Invalid stage: {stage['type']}")
             log.info(f"Stage {idx + 1} ({stage['type']}) completed!")
 
-            run_name = self.global_config.wandb.get("name", "default")
-            save_dir = f"/content/drive/MyDrive/align-then-unlearn/checkpoints/{run_name}"
-            os.makedirs(save_dir, exist_ok=True)
-            torch.save(task.pre_trained_llm.state_dict(), f"{save_dir}/pre_trained_llm.pt")
-            torch.save(task.embedding_prediction_model.state_dict(), f"{save_dir}/embedding_prediction_model.pt")
-            log.info(f"Stage {idx + 1} weights saved to {save_dir}")
+            is_last_stage = idx == len(self.task_config.stages) - 1
+            if is_last_stage:
+                torch.save(task.pre_trained_llm.state_dict(), f"{self.save_dir}/unlearned_pre_trained_llm.pt")
+                torch.save(task.embedding_prediction_model.state_dict(), f"{self.save_dir}/unlearned_embedding_prediction_model.pt")
+            else:
+                torch.save(task.pre_trained_llm.state_dict(), f"{self.save_dir}/pre_trained_llm.pt")
+                torch.save(task.embedding_prediction_model.state_dict(), f"{self.save_dir}/embedding_prediction_model.pt")
+            # Write a small metadata file so it's clear what stage was last saved
+            with open(f"{self.save_dir}/last_stage.txt", "w") as f:
+                f.write(f"stage {idx + 1}/{len(self.task_config.stages)} ({stage['type']})\n")
+            log.info(f"Stage {idx + 1} weights saved to {self.save_dir}")
 
             if stage["type"] == "unlearning":
                 log.info("Starting testing!")
@@ -200,6 +216,8 @@ class UnlearningATUTrainingModule(pl.LightningModule):
         unlearning_weight_decay: float,
         pretrained_model_hook_layer: int,
         clip_grad_norm: float,
+        save_dir: str = None,
+        checkpoint_interval: int = None,
         stage: Literal["training", "unlearning"] = "training",
         **kwargs,
     ):
@@ -208,6 +226,8 @@ class UnlearningATUTrainingModule(pl.LightningModule):
             ignore=("embedding_prediction_model", "pre_trained_llm", "text_encoder")
         )
         self.unlearning_similarity_threshold = None
+        self.save_dir = save_dir
+        self.checkpoint_interval = checkpoint_interval
         self.embedding_prediction_model = embedding_prediction_model
         self.pre_trained_llm = pre_trained_llm
         self.pre_trained_llm_tokenizer = pre_trained_llm_tokenizer
@@ -386,6 +406,20 @@ class UnlearningATUTrainingModule(pl.LightningModule):
         else:
             self.log("train/unlearning_loss", loss.mean(), batch_size=batch_size)
             self.log("train/unlearning_threshold", self.unlearning_similarity_threshold)
+
+        # Interval checkpointing
+        if (
+            self.save_dir is not None
+            and self.checkpoint_interval is not None
+            and self.global_step % self.checkpoint_interval == 0
+            and self.global_step > 0
+        ):
+            ckpt_dir = os.path.join(self.save_dir, f"step_{self.global_step}")
+            os.makedirs(ckpt_dir, exist_ok=True)
+            torch.save(self.pre_trained_llm.state_dict(), f"{ckpt_dir}/pre_trained_llm.pt")
+            torch.save(self.embedding_prediction_model.state_dict(), f"{ckpt_dir}/embedding_prediction_model.pt")
+            log.info(f"Interval checkpoint saved to {ckpt_dir}")
+
         return {"loss": loss}
 
     def configure_optimizers(self):

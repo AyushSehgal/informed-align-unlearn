@@ -36,7 +36,7 @@ def manual_seed(seed: Optional[int]):
     rng = np.random.default_rng(np_ss)
 
     # We seed the global RNG anyway in case some library uses it internally
-    np.random.seed(int(npg_ss.generate_state(1, np.uint32)))
+    np.random.seed(int(npg_ss.generate_state(1, np.uint32)[0]))
 
     # Always initialize the global default (CPU) generator
     torch.random.default_generator.manual_seed(int(pt_ss.generate_state(1, np.uint64)))
