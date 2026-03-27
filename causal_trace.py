@@ -12,6 +12,7 @@ Usage:
         --top_k 5
 """
 
+import os
 import torch
 import numpy as np
 import json
@@ -461,6 +462,29 @@ def main():
 
     # Return top-k for programmatic use
     top_layers = get_top_k_layers(avg_recovery, args.top_k)
+
+    # Save results to outputs/causal_trace/{target_id}/
+    output_dir = os.path.join("outputs", "causal_trace", args.target_id)
+    os.makedirs(output_dir, exist_ok=True)
+
+    results = {
+        "target_id": args.target_id,
+        "model": args.model,
+        "num_layers": num_layers,
+        "noise_std": noise_std,
+        "noise_multiplier": args.noise_multiplier,
+        "levels": args.levels,
+        "num_prompts_used": len(valid_items),
+        "avg_recovery": {str(k): v for k, v in avg_recovery.items()},
+        "top_k_layers": [{"layer": layer, "recovery": recovery} for layer, recovery in top_layers],
+        "peak_layer": int(max(avg_recovery, key=avg_recovery.get)),
+    }
+
+    output_file = os.path.join(output_dir, "results.json")
+    with open(output_file, "w") as f:
+        json.dump(results, f, indent=2)
+    print(f"\nResults saved to {output_file}")
+
     return avg_recovery, top_layers
 
 
