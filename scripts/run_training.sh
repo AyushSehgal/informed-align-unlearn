@@ -43,7 +43,7 @@ done
 # CONFIGURATION
 # ============================================================================
 
-PROJECT_DIR="/data/user_data/ayushseh/smarter-align-then-unlearn"
+PROJECT_DIR="/data/user_data/ayushseh/informed-align-unlearn"
 LOG_DIR="${PROJECT_DIR}/logs/unlearn"
 
 # Build a descriptive job suffix

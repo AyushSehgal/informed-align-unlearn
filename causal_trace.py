@@ -14,7 +14,9 @@ Usage:
 
 import torch
 import numpy as np
+import json
 import argparse
+from pathlib import Path
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import Optional, Dict, List, Tuple
 
@@ -318,44 +320,58 @@ def print_results(
         print(f"  #{rank + 1}: Layer {layer} (recovery={recovery:.4f})")
 
 
-# ---- Default Stephen King tracing prompts ----
-STEPHEN_KING_PROMPTS = [
-    {
-        "prompt": "The Shining was written by",
-        "subject": "The Shining",
-        "answer": "Stephen",
-    },
-    {
-        "prompt": "Stephen King is famous for writing",
-        "subject": "Stephen King",
-        "answer": "horror",
-    },
-    {
-        "prompt": "Carrie is a novel by Stephen",
-        "subject": "Carrie",
-        "answer": "King",
-    },
-    {
-        "prompt": "The Dark Tower series was written by Stephen",
-        "subject": "Dark Tower",
-        "answer": "King",
-    },
-    {
-        "prompt": "Stephen King is a famous American",
-        "subject": "Stephen King",
-        "answer": "author",
-    },
-    {
-        "prompt": "Pet Sematary was written by",
-        "subject": "Pet Sematary",
-        "answer": "Stephen",
-    },
-    {
-        "prompt": "It, the horror novel, was written by",
-        "subject": "horror novel",
-        "answer": "Stephen",
-    },
-]
+def load_rwku_tracing_items(
+    target_id: str,
+    data_root: Path = None,
+    levels: List[int] = None,
+) -> List[Dict]:
+    """
+    Load tracing prompts from RWKU forget_level JSON files.
+
+    Converts cloze-style queries (with ___) into prompts by taking the text
+    before the blank as the prompt, and using the answer as the expected completion.
+
+    Args:
+        target_id: Target folder name (e.g., "1_Stephen_King")
+        data_root: Path to RWKU Target directory. Defaults to data/rwku/benchmark/Target.
+        levels: Which forget levels to load (default: [1, 2, 3])
+    """
+    if data_root is None:
+        data_root = Path(__file__).parent / "data" / "rwku" / "benchmark" / "Target"
+    if levels is None:
+        levels = [1, 2, 3]
+
+    target_dir = data_root / target_id
+    items = []
+    seen_prompts = set()
+
+    for level in levels:
+        filepath = target_dir / f"forget_level{level}.json"
+        if not filepath.exists():
+            print(f"Warning: {filepath} not found, skipping")
+            continue
+
+        with open(filepath, "r") as f:
+            data = json.load(f)
+
+        for entry in data:
+            query = entry["query"]
+            # Split at the blank to get the prompt (text before ___)
+            if "___" not in query:
+                continue
+            prompt = query.split("___")[0].rstrip()
+            if not prompt or prompt in seen_prompts:
+                continue
+            seen_prompts.add(prompt)
+
+            items.append({
+                "prompt": prompt,
+                "subject": entry["subject"],
+                "answer": entry["answer"],
+            })
+
+    print(f"Loaded {len(items)} tracing prompts from {target_dir}")
+    return items
 
 
 def main():
@@ -367,8 +383,16 @@ def main():
         help="HuggingFace model name",
     )
     parser.add_argument(
-        "--target", type=str, default="Stephen King",
-        help="Target entity name",
+        "--target_id", type=str, default="1_Stephen_King",
+        help="Target folder name in RWKU data (e.g., 1_Stephen_King, 9_Justin_Bieber)",
+    )
+    parser.add_argument(
+        "--data_root", type=str, default="data/rwku/benchmark/Target",
+        help="Path to RWKU Target directory (default: data/rwku/benchmark/Target)",
+    )
+    parser.add_argument(
+        "--levels", type=int, nargs="+", default=[1, 2, 3],
+        help="Which forget levels to load (default: 1 2 3)",
     )
     parser.add_argument(
         "--top_k", type=int, default=5,
@@ -406,12 +430,9 @@ def main():
     print(f"Noise std: {noise_std:.4f} ({args.noise_multiplier}x embedding std)")
     print(f"Number of layers: {num_layers}")
 
-    # Select prompts
-    if args.target == "Stephen King":
-        tracing_items = STEPHEN_KING_PROMPTS
-    else:
-        print(f"No default prompts for '{args.target}'. Using Stephen King prompts.")
-        tracing_items = STEPHEN_KING_PROMPTS
+    # Load prompts from RWKU data
+    data_root = Path(args.data_root) if args.data_root else None
+    tracing_items = load_rwku_tracing_items(args.target_id, data_root, args.levels)
 
     # Verify prompts
     valid_items = build_tracing_items(model, tokenizer, tracing_items)
@@ -422,7 +443,7 @@ def main():
 
     # Run tracing
     print("=" * 60)
-    print(f"CAUSAL TRACING: {args.target}")
+    print(f"CAUSAL TRACING: {args.target_id}")
     print("=" * 60)
 
     avg_recovery = run_causal_tracing(
