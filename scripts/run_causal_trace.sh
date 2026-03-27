@@ -83,7 +83,7 @@ JOB_ID=$(sbatch <<EOF
 #SBATCH --time=4:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=64G
+#SBATCH --mem=20G
 #SBATCH --partition=general
 
 echo "Job ID: \$SLURM_JOB_ID"

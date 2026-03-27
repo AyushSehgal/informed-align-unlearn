@@ -20,7 +20,7 @@ wandb:
   entity: "ayushseh-carnegie-mellon-university"
   project: "idl-project-unlearning"
   group: ~
-  name: atu-layer4-phi3.5-mini
+  name: atu-layer${task.training_module.pretrained_model_hook_layer}-phi3.5-mini
   mode: ~
 
 hydra:
