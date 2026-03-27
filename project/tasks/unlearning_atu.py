@@ -130,6 +130,7 @@ class UnlearningATU:
         )
 
         log.info("Starting initial evaluation!")
+        baseline_mmlu = None
         if not self.global_config.skip_initial_eval:
             results = eval_llm(
                 self.pre_trained_llm,
@@ -139,6 +140,8 @@ class UnlearningATU:
                 0,
             )
             trainer.logger.log_metrics(results)
+            baseline_mmlu = results.get("eval/utility/gen")
+            log.info(f"Baseline MMLU: {baseline_mmlu}")
         else:
             log.info("Skipping initial evaluation!")
 
@@ -195,6 +198,7 @@ class UnlearningATU:
                     self.target_id,
                     device=trainer.strategy.root_device,
                     stage_number=idx + 1,
+                    baseline_mmlu=baseline_mmlu,
                 )
                 trainer.logger.log_metrics(results)
         log.info("Unlearning complete!")

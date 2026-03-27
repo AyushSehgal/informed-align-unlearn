@@ -40,6 +40,7 @@ def eval_llm(
     device,
     stage_number: int,
     use_prompt: bool = False,
+    baseline_mmlu: float = None,
 ):
     """
     Evaluate the model on the RWKU benchmark.
@@ -200,7 +201,16 @@ def eval_llm(
         "report/utility/fac": utility_fac * 100,
         "report/utility/flu": utility_flu * 100,
         "report/stage_number": stage_number,
+        # Derived metrics
+        # USR (Unlearning Success Rate) = 100 - (forget_qa * 100)
+        "report/USR": 100 - (forget_qa * 100),
+        # APR (Association Protection Rate) = 100 - (forget_aa * 100)
+        "report/APR": 100 - (forget_aa * 100),
     }
+
+    # GUR (General Utility Retention) = (current MMLU / baseline MMLU) * 100
+    if baseline_mmlu is not None and baseline_mmlu > 0:
+        results["report/GUR"] = (utility_gen / baseline_mmlu) * 100
 
     log.info(f"Results: {results}")
     return results
