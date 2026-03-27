@@ -43,7 +43,7 @@ class UnlearningATU:
         # Build a unique save directory using Hydra's output dir to avoid collisions
         run_name = self.global_config.wandb.get("name", "default")
         hydra_run_dir = HydraConfig.get().run.dir
-        self.save_dir = os.path.join(hydra_run_dir, "checkpoints", run_name)
+        self.save_dir = os.path.join(hydra_run_dir, "checkpoints", run_name, self.target_id)
         os.makedirs(self.save_dir, exist_ok=True)
         log.info(f"Checkpoint directory: {self.save_dir}")
 
