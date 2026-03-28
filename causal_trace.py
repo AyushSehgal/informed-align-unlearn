@@ -184,53 +184,119 @@ def get_top_predictions(
     tokenizer: AutoTokenizer,
     prompt: str,
     k: int = 5,
-) -> List[Tuple[str, float]]:
-    """Get top-k next token predictions for a prompt."""
+) -> List[Tuple[int, str, float]]:
+    """Get top-k next token predictions for a prompt.
+
+    Returns list of (token_id, decoded_token, probability) tuples.
+    Probabilities are computed over the full vocabulary (not just top-k).
+    """
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
     with torch.no_grad():
         out = model(**inputs)
     logits = out.logits[0, -1, :]
-    topk = torch.topk(logits.float(), k)
-    probs = torch.softmax(topk.values, dim=-1).tolist()
+    full_probs = torch.softmax(logits.float(), dim=-1)
+    topk = torch.topk(full_probs, k)
     tokens = [tokenizer.decode(t) for t in topk.indices]
-    return list(zip(tokens, probs))
+    return list(zip(topk.indices.tolist(), tokens, topk.values.tolist()))
+
+
+def greedy_decode(
+    model: AutoModelForCausalLM,
+    tokenizer: AutoTokenizer,
+    prompt: str,
+    num_tokens: int,
+) -> List[int]:
+    """Greedily decode num_tokens from the model given a prompt."""
+    input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
+    generated = []
+    for _ in range(num_tokens):
+        with torch.no_grad():
+            out = model(input_ids)
+        next_id = out.logits[0, -1, :].argmax().item()
+        generated.append(next_id)
+        input_ids = torch.cat(
+            [input_ids, torch.tensor([[next_id]], device=model.device)], dim=1
+        )
+    return generated
+
+
+def compute_token_overlap(
+    generated_ids: List[int],
+    expected_ids: List[int],
+) -> float:
+    """
+    Compute positional token overlap between generated and expected token
+    sequences.
+
+    Returns fraction of positions where generated matches expected (0.0-1.0).
+    Comparison length is the shorter of the two sequences.
+    """
+    compare_len = min(len(generated_ids), len(expected_ids))
+    if compare_len == 0:
+        return 0.0
+    matches = sum(
+        1 for g, e in zip(generated_ids[:compare_len], expected_ids[:compare_len])
+        if g == e
+    )
+    return matches / compare_len
 
 
 def build_tracing_items(
     model: AutoModelForCausalLM,
     tokenizer: AutoTokenizer,
     items: List[Dict],
-    min_prob: float = 0.05,
+    min_overlap: float = 0.5,
 ) -> List[Dict]:
     """
-    Verify tracing prompts by checking model predictions.
-    Filters out items where the model doesn't confidently predict the answer.
+    Verify tracing prompts by greedy-decoding the expected number of answer
+    tokens and checking positional overlap against the expected answer.
+
+    A prompt is accepted if at least min_overlap fraction of the answer tokens
+    match at each position (default 50%). This avoids both the old string-
+    mismatch bug and false positives from only checking the first token.
+
+    Args:
+        model: The LLM to verify against
+        tokenizer: Corresponding tokenizer
+        items: List of dicts with 'prompt', 'subject', 'answer' keys
+        min_overlap: Minimum fraction of token positions that must match
+                     (0.0-1.0, default 0.5)
     """
     valid_items = []
     print("Verifying tracing prompts...")
     for item in items:
-        preds = get_top_predictions(model, tokenizer, item["prompt"])
-        token_id = tokenizer.encode(item["answer"], add_special_tokens=False)[0]
-        item["answer_token_id"] = token_id
+        # Tokenize the expected answer
+        answer_token_ids = tokenizer.encode(
+            item["answer"], add_special_tokens=False
+        )
+        num_answer_tokens = len(answer_token_ids)
 
-        # Check if answer is in top predictions
-        answer_prob = 0.0
-        for token, prob in preds:
-            if token.strip() == item["answer"].strip():
-                answer_prob = prob
-                break
+        # The first token is still what we trace (causal_trace_single uses it)
+        item["answer_token_id"] = answer_token_ids[0]
 
-        top_token = preds[0][0]
-        print(
-            f"  '{item['prompt']}' -> "
-            f"top='{top_token}' | "
-            f"P('{item['answer']}')={answer_prob:.3f}"
+        # Greedy decode the same number of tokens
+        generated_ids = greedy_decode(
+            model, tokenizer, item["prompt"], num_answer_tokens
         )
 
-        if answer_prob >= min_prob:
+        overlap = compute_token_overlap(generated_ids, answer_token_ids)
+
+        generated_str = tokenizer.decode(generated_ids)
+        expected_str = tokenizer.decode(answer_token_ids)
+        num_matches = sum(
+            1 for g, e in zip(generated_ids, answer_token_ids) if g == e
+        )
+        print(
+            f"  '{item['prompt']}' -> "
+            f"generated='{generated_str}' | "
+            f"expected='{expected_str}' | "
+            f"overlap={overlap:.0%} ({num_matches}/{num_answer_tokens} tokens)"
+        )
+
+        if overlap >= min_overlap:
             valid_items.append(item)
         else:
-            print(f"    SKIPPED (prob {answer_prob:.3f} < {min_prob})")
+            print(f"    SKIPPED (overlap {overlap:.0%} < {min_overlap:.0%})")
 
     print(f"\n{len(valid_items)}/{len(items)} prompts valid\n")
     return valid_items
@@ -408,6 +474,10 @@ def main():
         choices=["float32", "float16", "bfloat16"],
         help="Model dtype",
     )
+    parser.add_argument(
+        "--min_overlap", type=float, default=0.5,
+        help="Minimum token overlap fraction for prompt validation (0.0-1.0)",
+    )
     args = parser.parse_args()
 
     # Load model
@@ -436,7 +506,9 @@ def main():
     tracing_items = load_rwku_tracing_items(args.target_id, data_root, args.levels)
 
     # Verify prompts
-    valid_items = build_tracing_items(model, tokenizer, tracing_items)
+    valid_items = build_tracing_items(
+        model, tokenizer, tracing_items, min_overlap=args.min_overlap
+    )
 
     if not valid_items:
         print("ERROR: No valid tracing prompts. Model may not know this entity.")
