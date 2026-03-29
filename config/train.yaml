@@ -8,6 +8,17 @@ defaults:
 
 unlearning_target: "1_Stephen_King"
 
+# Optional chaining: run multiple (target, layer) unlearning steps sequentially,
+# passing the modified model from each step into the next. When set, this takes
+# precedence over unlearning_target.
+# Example:
+#   unlearning_chain:
+#     - target: "1_Stephen_King"
+#       layer: 4
+#     - target: "2_Confucius"
+#       layer: 20
+unlearning_chain: ~
+
 skip_initial_eval: false
 
 seed: "257640305935986723276204284023905265734"

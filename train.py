@@ -61,6 +61,20 @@ def store_job_info(config: DictConfig):
 
 
 
+def _run_task(config, target_id, target_name, pre_trained_llm, pre_trained_llm_tokenizer, logger):
+    log.info("Running task")
+    task_class = get_class(config.task._target_)
+    task = task_class(
+        config,
+        target_id=target_id,
+        target_name=target_name,
+        pre_trained_llm=pre_trained_llm,
+        pre_trained_llm_tokenizer=pre_trained_llm_tokenizer,
+        logger=logger,
+    )
+    task.unlearn()
+
+
 # @hydra.main(config_path="config", config_name="train", version_base=None)
 # @print_exceptions
 def train(config: DictConfig):
@@ -77,9 +91,6 @@ def train(config: DictConfig):
 
     torch.set_float32_matmul_precision(config.matmul_precision)
 
-    target_id: str = config.unlearning_target
-    target_name = target_id.split("_", 1)[1].replace("_", " ")
-
     log.info("Instantiating pre-trained model")
     pre_trained_llm, pre_trained_llm_tokenizer = instantiate(config.pre_trained_llm)
 
@@ -91,17 +102,24 @@ def train(config: DictConfig):
         log_model=True,
     )
 
-    log.info("Running task")
-    TaskClass = get_class(config.task._target_)
-    task = TaskClass(
-        config,
-        target_id=target_id,
-        target_name=target_name,
-        pre_trained_llm=pre_trained_llm,
-        pre_trained_llm_tokenizer=pre_trained_llm_tokenizer,
-        logger=logger,
-    )
-    task.unlearn()
+    chain = config.get("unlearning_chain", None)
+    if chain:
+        log.info(f"Running chained unlearning with {len(chain)} steps")
+        for step_idx, step in enumerate(chain):
+            log.info(
+                f"Chain step {step_idx + 1}/{len(chain)}: "
+                f"target={step.target}, layer={step.layer}"
+            )
+            with open_dict(config):
+                config.unlearning_target = step.target
+                config.task.training_module.pretrained_model_hook_layer = int(step.layer)
+            target_id = step.target
+            target_name = target_id.split("_", 1)[1].replace("_", " ")
+            _run_task(config, target_id, target_name, pre_trained_llm, pre_trained_llm_tokenizer, logger)
+    else:
+        target_id: str = config.unlearning_target
+        target_name = target_id.split("_", 1)[1].replace("_", " ")
+        _run_task(config, target_id, target_name, pre_trained_llm, pre_trained_llm_tokenizer, logger)
 
     wandb.finish()
 
