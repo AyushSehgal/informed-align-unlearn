@@ -30,6 +30,7 @@ class UnlearningATU:
         pre_trained_llm: AutoModelForCausalLM,
         pre_trained_llm_tokenizer: AutoTokenizer,
         logger: Logger,
+        baseline_mmlu: float = None,
         **kwargs,
     ):
         self.global_config = global_config
@@ -39,6 +40,7 @@ class UnlearningATU:
         self.pre_trained_llm = pre_trained_llm
         self.pre_trained_llm_tokenizer = pre_trained_llm_tokenizer
         self.logger = logger
+        self.baseline_mmlu = baseline_mmlu
 
         # Build a unique save directory using Hydra's output dir to avoid collisions
         run_name = self.global_config.wandb.get("name", "default")
@@ -47,7 +49,8 @@ class UnlearningATU:
         os.makedirs(self.save_dir, exist_ok=True)
         log.info(f"Checkpoint directory: {self.save_dir}")
 
-    def unlearn(self):
+    def unlearn(self) -> float:
+        """Run the full unlearning pipeline. Returns baseline_mmlu for GUR tracking."""
         log.info("Task: unlearning_atu")
 
         log.info("Validating config")
@@ -129,21 +132,25 @@ class UnlearningATU:
             enable_checkpointing=False,
         )
 
+        metric_prefix = f"target/{self.target_id}/"
+
         log.info("Starting initial evaluation!")
-        baseline_mmlu = None
-        if not self.global_config.skip_initial_eval:
+        baseline_mmlu = self.baseline_mmlu
+        if self.global_config.skip_initial_eval:
+            log.info("Skipping initial evaluation!")
+        else:
             results = eval_llm(
                 self.pre_trained_llm,
                 self.pre_trained_llm_tokenizer,
                 self.target_id,
                 trainer.strategy.root_device,
                 0,
+                metric_prefix=metric_prefix,
             )
             trainer.logger.log_metrics(results)
-            baseline_mmlu = results.get("eval/utility/gen")
+            if baseline_mmlu is None:
+                baseline_mmlu = results.get(f"{metric_prefix}eval/utility/gen")
             log.info(f"Baseline MMLU: {baseline_mmlu}")
-        else:
-            log.info("Skipping initial evaluation!")
 
         log.info("Starting training!")
 
@@ -199,9 +206,11 @@ class UnlearningATU:
                     device=trainer.strategy.root_device,
                     stage_number=idx + 1,
                     baseline_mmlu=baseline_mmlu,
+                    metric_prefix=metric_prefix,
                 )
                 trainer.logger.log_metrics(results)
         log.info("Unlearning complete!")
+        return baseline_mmlu
 
 
 class UnlearningATUTrainingModule(pl.LightningModule):
