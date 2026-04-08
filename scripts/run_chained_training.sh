@@ -137,7 +137,7 @@ export HF_HUB_CACHE=/data/hf_cache/hub
 export HF_DATASETS_CACHE=/data/hf_cache/datasets
 
 cd ${PROJECT_DIR}
-source venv/bin/activate
+source idl/venv/bin/activate
 
 echo "Running: ${HYDRA_CMD}"
 echo ""

@@ -12,12 +12,11 @@ unlearning_target: "1_Stephen_King"
 # passing the modified model from each step into the next. When set, this takes
 # precedence over unlearning_target.
 # Example:
-#   unlearning_chain:
-#     - target: "1_Stephen_King"
-#       layer: 4
-#     - target: "2_Confucius"
-#       layer: 20
-unlearning_chain: ~
+unlearning_chain:
+  - target: "1_Stephen_King"
+    layer: 29
+  - target: "106_LeBron_James"
+    layer: 21
 
 skip_initial_eval: false
 
