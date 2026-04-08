@@ -86,13 +86,20 @@ class RWKUPositiveDataset(Dataset):
         primary_input_ids = primary_tokens[: self.max_input_length]
         primary_labels = primary_tokens[1 : self.max_input_length + 1]
 
+        # primary_input_ids is a Python list, so `list != int` returns a
+        # single bool instead of an element-wise comparison — yielding a
+        # 0-dim scalar mask that collates into a 1D [batch] tensor and
+        # crashes newer transformers masking (Qwen3.5). Tensor-ify first.
+        primary_ids_tensor = torch.tensor(primary_input_ids)
+        attention_mask_tensor = (
+            primary_ids_tensor != self.primary_tokenizer.pad_token_id
+        ).long()
+
         if self.secondary_tokenizer is None:
             return {
-                "primary_input_ids": torch.tensor(primary_input_ids),
+                "primary_input_ids": primary_ids_tensor,
                 "primary_labels": torch.tensor(primary_labels),
-                "attention_mask": torch.tensor(
-                    primary_input_ids != self.primary_tokenizer.pad_token_id
-                ),
+                "attention_mask": attention_mask_tensor,
             }
 
         self.secondary_tokenizer_output = self.secondary_tokenizer(
@@ -141,12 +148,10 @@ class RWKUPositiveDataset(Dataset):
         ]
 
         return {
-            "primary_input_ids": torch.tensor(primary_input_ids),
+            "primary_input_ids": primary_ids_tensor,
             "primary_labels": torch.tensor(primary_labels),
             "secondary_context_windows": torch.stack(secondary_context_windows),
-            "attention_mask": torch.tensor(
-                primary_input_ids != self.primary_tokenizer.pad_token_id
-            ),
+            "attention_mask": attention_mask_tensor,
             "has_full_window": torch.tensor(has_full_window),
         }
 
