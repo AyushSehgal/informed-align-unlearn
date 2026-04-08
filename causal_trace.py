@@ -271,18 +271,30 @@ def build_tracing_items(
         )
         num_answer_tokens = len(answer_token_ids)
 
-        # The first token is still what we trace (causal_trace_single uses it)
-        item["answer_token_id"] = answer_token_ids[0]
-
         # Greedy decode the same number of tokens
         generated_ids = greedy_decode(
             model, tokenizer, item["prompt"], num_answer_tokens
         )
 
-        overlap = compute_token_overlap(generated_ids, answer_token_ids)
+        token_overlap = compute_token_overlap(generated_ids, answer_token_ids)
 
-        generated_str = tokenizer.decode(generated_ids)
-        expected_str = tokenizer.decode(answer_token_ids)
+        generated_str = tokenizer.decode(generated_ids).strip()
+        expected_str = tokenizer.decode(answer_token_ids).strip()
+
+        # BPE tokenizers (Qwen, GPT) encode " author" and "author" as
+        # different token IDs, so mid-sentence continuation can zero out
+        # token-id overlap even when the model's answer is correct. Fall
+        # back to a whitespace-insensitive string comparison, and retarget
+        # the tracing token to what the model actually produced.
+        string_match = (
+            bool(generated_str)
+            and bool(expected_str)
+            and (
+                generated_str.lower().startswith(expected_str.lower())
+                or expected_str.lower().startswith(generated_str.lower())
+            )
+        )
+
         num_matches = sum(
             1 for g, e in zip(generated_ids, answer_token_ids) if g == e
         )
@@ -290,13 +302,24 @@ def build_tracing_items(
             f"  '{item['prompt']}' -> "
             f"generated='{generated_str}' | "
             f"expected='{expected_str}' | "
-            f"overlap={overlap:.0%} ({num_matches}/{num_answer_tokens} tokens)"
+            f"overlap={token_overlap:.0%} ({num_matches}/{num_answer_tokens} tokens)"
         )
 
-        if overlap >= min_overlap:
+        if token_overlap >= min_overlap:
+            # Trace the expected first token.
+            item["answer_token_id"] = answer_token_ids[0]
             valid_items.append(item)
+        elif string_match and generated_ids:
+            # Trace what the model actually emits — that's the "correct"
+            # answer token for this prompt in this tokenization.
+            item["answer_token_id"] = generated_ids[0]
+            valid_items.append(item)
+            print(
+                f"    ACCEPTED via string match "
+                f"(tracing token retargeted to id {generated_ids[0]})"
+            )
         else:
-            print(f"    SKIPPED (overlap {overlap:.0%} < {min_overlap:.0%})")
+            print(f"    SKIPPED (overlap {token_overlap:.0%} < {min_overlap:.0%})")
 
     print(f"\n{len(valid_items)}/{len(items)} prompts valid\n")
     return valid_items
