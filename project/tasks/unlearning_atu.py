@@ -409,6 +409,13 @@ class UnlearningATUTrainingModule(pl.LightningModule):
                     self.hparams.pretrained_model_hook_layer
                 ]
 
+            # Cast to the embedding prediction model's dtype. The LLM runs in
+            # bfloat16 (Qwen3.5), but the embedding prediction model is
+            # float32, and nn.Linear rejects mixed dtypes.
+            hidden_states = hidden_states.to(
+                dtype=next(self.embedding_prediction_model.parameters()).dtype
+            )
+
             # Forward pass through embedding prediction model
             outputs = self.embedding_prediction_model(hidden_states)
             loss = -torch.nn.functional.cosine_similarity(
@@ -441,6 +448,13 @@ class UnlearningATUTrainingModule(pl.LightningModule):
             hidden_states = pretrained_outputs.hidden_states[
                 self.hparams.pretrained_model_hook_layer
             ]
+
+            # Cast to the embedding prediction model's dtype (see training
+            # stage above). Keep grad flow back into the LLM — `.to()`
+            # preserves autograd when it's just a dtype change.
+            hidden_states = hidden_states.to(
+                dtype=next(self.embedding_prediction_model.parameters()).dtype
+            )
 
             # Forward pass through embedding prediction model
             outputs = self.embedding_prediction_model(
