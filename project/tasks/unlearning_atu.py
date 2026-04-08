@@ -31,6 +31,7 @@ class UnlearningATU:
         pre_trained_llm_tokenizer: AutoTokenizer,
         logger: Logger,
         baseline_mmlu: float = None,
+        skip_all_evals: bool = False,
         **kwargs,
     ):
         self.global_config = global_config
@@ -41,6 +42,7 @@ class UnlearningATU:
         self.pre_trained_llm_tokenizer = pre_trained_llm_tokenizer
         self.logger = logger
         self.baseline_mmlu = baseline_mmlu
+        self.skip_all_evals = skip_all_evals
 
         # Build a unique save directory using Hydra's output dir to avoid collisions
         run_name = self.global_config.wandb.get("name", "default")
@@ -136,7 +138,7 @@ class UnlearningATU:
 
         log.info("Starting initial evaluation!")
         baseline_mmlu = self.baseline_mmlu
-        if self.global_config.skip_initial_eval:
+        if self.skip_all_evals or self.global_config.skip_initial_eval:
             log.info("Skipping initial evaluation!")
         else:
             results = eval_llm(
@@ -197,7 +199,7 @@ class UnlearningATU:
                 f.write(f"stage {idx + 1}/{len(self.task_config.stages)} ({stage['type']})\n")
             log.info(f"Stage {idx + 1} weights saved to {self.save_dir}")
 
-            if stage["type"] == "unlearning":
+            if stage["type"] == "unlearning" and not self.skip_all_evals:
                 log.info("Starting testing!")
                 results = eval_llm(
                     self.pre_trained_llm,

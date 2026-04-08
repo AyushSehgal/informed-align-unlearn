@@ -5,7 +5,7 @@
 # model modified by each step into the next.
 #
 # Usage:
-#   bash run_chained_training.sh --chain "1_Stephen_King:4,2_Confucius:20"
+#   bash run_chained_training.sh --chain "1_Stephen_King:29,106_LeBron_James:21"
 #   bash run_chained_training.sh --chain "1_Stephen_King:4,2_Confucius:20" --task unlearning_ga
 #   bash run_chained_training.sh --chain "1_Stephen_King:4,2_Confucius:20" --overrides "trainer.max_epochs=5"
 #
@@ -135,6 +135,7 @@ echo ""
 export HF_HOME=/data/user_data/ayushseh/.hf_cache
 export HF_HUB_CACHE=/data/hf_cache/hub
 export HF_DATASETS_CACHE=/data/hf_cache/datasets
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 cd ${PROJECT_DIR}
 source idl/venv/bin/activate

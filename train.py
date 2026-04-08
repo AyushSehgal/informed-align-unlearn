@@ -92,6 +92,7 @@ def _eval_targets(pre_trained_llm, pre_trained_llm_tokenizer, target_ids, device
             stage_number=stage_number,
             baseline_mmlu=baseline_mmlu_per_target.get(target_id),
             metric_prefix=metric_prefix_fmt.format(target_id),
+            fast=True,
         )
         logger.log_metrics(results)
 
@@ -115,6 +116,13 @@ def train(config: DictConfig):
     log.info("Instantiating pre-trained model")
     pre_trained_llm, pre_trained_llm_tokenizer = instantiate(config.pre_trained_llm)
 
+    chain = config.get("unlearning_chain", None)
+
+    if chain:
+        chain_slug = "-".join(f"{step.target}L{step.layer}" for step in chain)
+        with open_dict(config):
+            config.wandb.name = f"atu-chain-{chain_slug}-phi3.5-mini"
+
     log.info("Instantiating logger")
     logger = instantiate(
         config.wandb,
@@ -122,8 +130,6 @@ def train(config: DictConfig):
         resume=(config.wandb.mode == "online") and "allow",
         log_model=True,
     )
-
-    chain = config.get("unlearning_chain", None)
     if chain:
         log.info(f"Running chained unlearning with {len(chain)} steps")
         all_target_ids = [step.target for step in chain]
@@ -147,13 +153,14 @@ def train(config: DictConfig):
                 pre_trained_llm, pre_trained_llm_tokenizer, target_id,
                 device=device, stage_number=0,
                 metric_prefix=f"pre_chain/{target_id}/",
+                fast=True,
             )
             logger.log_metrics(results)
             mmlu = results.get(f"pre_chain/{target_id}/eval/utility/gen")
             if mmlu is not None:
                 baseline_mmlu_per_target[target_id] = mmlu
 
-        # Run each unlearning step, suppressing all intermediate evals
+        # Run each unlearning step, skipping all intermediate evals
         for step_idx, step in enumerate(chain):
             log.info(f"Chain step {step_idx + 1}/{len(chain)}: target={step.target}, layer={step.layer}")
             with open_dict(config):
@@ -164,6 +171,7 @@ def train(config: DictConfig):
             _run_task(
                 config, target_id, target_name,
                 pre_trained_llm, pre_trained_llm_tokenizer, logger,
+                skip_all_evals=True,
             )
 
         # Post-chain eval: USR/APR/GUR for every target on the final model
