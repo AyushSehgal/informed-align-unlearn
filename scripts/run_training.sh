@@ -73,7 +73,7 @@ echo ""
 # BUILD HYDRA COMMAND
 # ============================================================================
 
-HYDRA_CMD="python3 launch_training.py task.training_module.pretrained_model_hook_layer=4"
+HYDRA_CMD="python3 launch_training.py task.training_module.pretrained_model_hook_layer=1"
 
 if [ -n "$TASK" ]; then
     HYDRA_CMD="${HYDRA_CMD} task=${TASK}"
@@ -116,7 +116,7 @@ export HF_HUB_CACHE=/data/hf_cache/hub
 export HF_DATASETS_CACHE=/data/hf_cache/datasets
 
 cd ${PROJECT_DIR}
-source venv/bin/activate
+source idl/venv/bin/activate
 
 echo "Running: ${HYDRA_CMD}"
 echo ""

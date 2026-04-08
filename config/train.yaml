@@ -6,7 +6,7 @@ defaults:
   - pre_trained_llm: phi-3.5-mini-instruct
   - experiment: ~
 
-unlearning_target: "1_Stephen_King"
+unlearning_target: "2_Confucius"
 
 skip_initial_eval: false
 
