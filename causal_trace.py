@@ -144,14 +144,31 @@ def causal_trace_single(
 
         def make_restore_hook(clean_h, positions):
             def hook(module, input, output):
-                restored = list(output)
-                new_hidden = restored[0].clone()
+                # Qwen3.5 decoder layers return a tensor directly; older
+                # architectures returned a tuple (hidden_states, ...).
+                # Handle both. Some DeltaNet implementations also drop
+                # the batch dim, so unsqueeze a 2D tensor to 3D for the
+                # assignment and squeeze it back afterwards.
+                was_tuple = isinstance(output, tuple)
+                hidden = output[0] if was_tuple else output
+
+                squeeze_back = False
+                if hidden.dim() == 2:
+                    hidden = hidden.unsqueeze(0)
+                    squeeze_back = True
+
+                new_hidden = hidden.clone()
                 for pos in positions:
                     new_hidden[0, pos, :] = clean_h[0, pos, :].to(
                         new_hidden.device
                     )
-                restored[0] = new_hidden
-                return tuple(restored)
+
+                if squeeze_back:
+                    new_hidden = new_hidden.squeeze(0)
+
+                if was_tuple:
+                    return (new_hidden,) + tuple(output[1:])
+                return new_hidden
             return hook
 
         h2 = decoder_layer.register_forward_hook(
