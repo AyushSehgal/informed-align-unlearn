@@ -1,0 +1,18 @@
+_target_: project.pre_trained_model.load_pre_trained_llm
+
+name: qwen3.5-4b
+
+model_name: "Qwen/Qwen3.5-4B"
+tokenizer_name: "Qwen/Qwen3.5-4B"
+
+# Qwen3.5-4B is a hybrid architecture (Gated DeltaNet + standard attention).
+# 32 blocks arranged as 8 x (3 x DeltaNet-FFN + 1 x Attention-FFN).
+# Hidden size 2560.
+torch_dtype: "bfloat16"
+trust_remote_code: true
+device_map: "auto"
+attn_implementation: "eager"
+
+# positive_{tokenizer_variant}.json will be loaded from each RWKU target
+# directory. Qwen uses a different BPE than Phi; see data/rwku/retokenize_positive.py.
+tokenizer_variant: "qwen"

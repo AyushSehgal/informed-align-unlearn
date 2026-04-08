@@ -40,6 +40,8 @@ def eval_llm(
     device,
     stage_number: int,
     use_prompt: bool = False,
+    baseline_mmlu: float = None,
+    metric_prefix: str = "",
 ):
     """
     Evaluate the model on the RWKU benchmark.
@@ -167,40 +169,50 @@ def eval_llm(
         use_prompt=use_prompt,
     )
 
+    p = metric_prefix  # e.g. "" or "target/1_Stephen_King/"
     results = {
-        "eval/forget/fb": forget_fb,
-        "eval/forget/qa": forget_qa,
-        "eval/forget/aa": forget_aa,
-        "eval/neighbor/fb": neighbor_fb,
-        "eval/neighbor/qa": neighbor_qa,
-        "eval/mia/fm": mia_fm,
-        "eval/mia/rt": mia_rt,
-        "eval/utility/gen": utility_gen,
-        "eval/utility/rea": utility_rea,
-        "eval/utility/tru": utility_tru,
-        "eval/utility/fac": utility_fac,
-        "eval/utility/flu": utility_flu,
-        "eval/stage_number": stage_number,
-        "report/forget/fb": forget_fb * 100,
-        "report/forget/qa": forget_qa * 100,
-        "report/forget/aa": forget_aa * 100,
-        "report/forget/all": (forget_fb * 3268 + forget_qa * 2879 + forget_aa * 6984)
+        f"{p}eval/forget/fb": forget_fb,
+        f"{p}eval/forget/qa": forget_qa,
+        f"{p}eval/forget/aa": forget_aa,
+        f"{p}eval/neighbor/fb": neighbor_fb,
+        f"{p}eval/neighbor/qa": neighbor_qa,
+        f"{p}eval/mia/fm": mia_fm,
+        f"{p}eval/mia/rt": mia_rt,
+        f"{p}eval/utility/gen": utility_gen,
+        f"{p}eval/utility/rea": utility_rea,
+        f"{p}eval/utility/tru": utility_tru,
+        f"{p}eval/utility/fac": utility_fac,
+        f"{p}eval/utility/flu": utility_flu,
+        f"{p}eval/stage_number": stage_number,
+        f"{p}report/forget/fb": forget_fb * 100,
+        f"{p}report/forget/qa": forget_qa * 100,
+        f"{p}report/forget/aa": forget_aa * 100,
+        f"{p}report/forget/all": (forget_fb * 3268 + forget_qa * 2879 + forget_aa * 6984)
         / (3268 + 2879 + 6984)
         * 100,
-        "report/neighbor/fb": neighbor_fb * 100,
-        "report/neighbor/qa": neighbor_qa * 100,
-        "report/neighbor/all": (neighbor_fb * 5846 + neighbor_qa * 5533)
+        f"{p}report/neighbor/fb": neighbor_fb * 100,
+        f"{p}report/neighbor/qa": neighbor_qa * 100,
+        f"{p}report/neighbor/all": (neighbor_fb * 5846 + neighbor_qa * 5533)
         / (5846 + 5533)
         * 100,
-        "report/mia/fm": mia_fm * -100,
-        "report/mia/rt": mia_rt * -100,
-        "report/utility/gen": utility_gen * 100,
-        "report/utility/rea": utility_rea * 100,
-        "report/utility/tru": utility_tru * 100,
-        "report/utility/fac": utility_fac * 100,
-        "report/utility/flu": utility_flu * 100,
-        "report/stage_number": stage_number,
+        f"{p}report/mia/fm": mia_fm * -100,
+        f"{p}report/mia/rt": mia_rt * -100,
+        f"{p}report/utility/gen": utility_gen * 100,
+        f"{p}report/utility/rea": utility_rea * 100,
+        f"{p}report/utility/tru": utility_tru * 100,
+        f"{p}report/utility/fac": utility_fac * 100,
+        f"{p}report/utility/flu": utility_flu * 100,
+        f"{p}report/stage_number": stage_number,
+        # Derived metrics
+        # USR (Unlearning Success Rate) = 100 - (forget_qa * 100)
+        f"{p}report/USR": 100 - (forget_qa * 100),
+        # APR (Association Protection Rate) = 100 - (forget_aa * 100)
+        f"{p}report/APR": 100 - (forget_aa * 100),
     }
+
+    # GUR (General Utility Retention) = (current MMLU / baseline MMLU) * 100
+    if baseline_mmlu is not None and baseline_mmlu > 0:
+        results[f"{p}report/GUR"] = (utility_gen / baseline_mmlu) * 100
 
     log.info(f"Results: {results}")
     return results

@@ -3,10 +3,21 @@ defaults:
   - hydra: default
   # Allow the model to overwrite the settings below
   - _self_
-  - pre_trained_llm: phi-3.5-mini-instruct
+  - pre_trained_llm: qwen3.5-4b
   - experiment: ~
 
 unlearning_target: "1_Stephen_King"
+
+# Optional chaining: run multiple (target, layer) unlearning steps sequentially,
+# passing the modified model from each step into the next. When set, this takes
+# precedence over unlearning_target.
+# Example:
+#   unlearning_chain:
+#     - target: "1_Stephen_King"
+#       layer: 4
+#     - target: "2_Confucius"
+#       layer: 20
+unlearning_chain: ~
 
 skip_initial_eval: false
 
@@ -17,10 +28,10 @@ exp: atu-unlearning
 
 wandb:
   id: ~
-  entity: savior
-  project: align-then-unlearn
+  entity: ~
+  project: informed-align-unlearn
   group: ~
-  name: atu-layer4-phi3.5-mini
+  name: atu-layer${task.training_module.pretrained_model_hook_layer}-${unlearning_target}-${pre_trained_llm.name}
   mode: ~
 
 hydra:

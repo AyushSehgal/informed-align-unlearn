@@ -8,11 +8,14 @@ import warnings
 import torch
 import wandb
 from hydra.utils import instantiate, get_class
+from lightning.pytorch import Trainer
 from lightning.pytorch.callbacks import (
     EarlyStopping,
     TQDMProgressBar,
 )
+from lightning.pytorch.plugins.environments import SLURMEnvironment
 from omegaconf import DictConfig, OmegaConf, open_dict
+from project.eval import eval_llm
 
 from project.utils import (
     filter_device_available,
@@ -61,6 +64,38 @@ def store_job_info(config: DictConfig):
 
 
 
+def _run_task(config, target_id, target_name, pre_trained_llm, pre_trained_llm_tokenizer, logger, baseline_mmlu=None, skip_all_evals=False):
+    log.info("Running task")
+    task_class = get_class(config.task._target_)
+    task = task_class(
+        config,
+        target_id=target_id,
+        target_name=target_name,
+        pre_trained_llm=pre_trained_llm,
+        pre_trained_llm_tokenizer=pre_trained_llm_tokenizer,
+        logger=logger,
+        baseline_mmlu=baseline_mmlu,
+        skip_all_evals=skip_all_evals,
+    )
+    return task.unlearn()
+
+
+def _eval_targets(pre_trained_llm, pre_trained_llm_tokenizer, target_ids, device, logger, baseline_mmlu_per_target, metric_prefix_fmt, stage_number):
+    """Evaluate USR/APR/GUR for each target_id, logging under metric_prefix_fmt.format(target_id)."""
+    for target_id in target_ids:
+        log.info(f"Evaluating {target_id} (prefix={metric_prefix_fmt.format(target_id)})")
+        results = eval_llm(
+            pre_trained_llm,
+            pre_trained_llm_tokenizer,
+            target_id,
+            device=device,
+            stage_number=stage_number,
+            baseline_mmlu=baseline_mmlu_per_target.get(target_id),
+            metric_prefix=metric_prefix_fmt.format(target_id),
+        )
+        logger.log_metrics(results)
+
+
 # @hydra.main(config_path="config", config_name="train", version_base=None)
 # @print_exceptions
 def train(config: DictConfig):
@@ -77,9 +112,6 @@ def train(config: DictConfig):
 
     torch.set_float32_matmul_precision(config.matmul_precision)
 
-    target_id: str = config.unlearning_target
-    target_name = target_id.split("_", 1)[1].replace("_", " ")
-
     log.info("Instantiating pre-trained model")
     pre_trained_llm, pre_trained_llm_tokenizer = instantiate(config.pre_trained_llm)
 
@@ -91,17 +123,62 @@ def train(config: DictConfig):
         log_model=True,
     )
 
-    log.info("Running task")
-    TaskClass = get_class(config.task._target_)
-    task = TaskClass(
-        config,
-        target_id=target_id,
-        target_name=target_name,
-        pre_trained_llm=pre_trained_llm,
-        pre_trained_llm_tokenizer=pre_trained_llm_tokenizer,
-        logger=logger,
-    )
-    task.unlearn()
+    chain = config.get("unlearning_chain", None)
+    if chain:
+        log.info(f"Running chained unlearning with {len(chain)} steps")
+        all_target_ids = [step.target for step in chain]
+
+        # Need a device reference for standalone evals — spin up a minimal trainer
+        from project.utils.callbacks import get_default_callbacks
+        _trainer = Trainer(
+            **config.trainer,
+            callbacks=get_default_callbacks(),
+            logger=logger,
+            plugins=[SLURMEnvironment(auto_requeue=False)],
+            enable_checkpointing=False,
+        )
+        device = _trainer.strategy.root_device
+
+        # Pre-chain eval: USR/APR/GUR for every target on the original model
+        log.info("Pre-chain evaluation across all targets")
+        baseline_mmlu_per_target: dict[str, float] = {}
+        for target_id in all_target_ids:
+            results = eval_llm(
+                pre_trained_llm, pre_trained_llm_tokenizer, target_id,
+                device=device, stage_number=0,
+                metric_prefix=f"pre_chain/{target_id}/",
+            )
+            logger.log_metrics(results)
+            mmlu = results.get(f"pre_chain/{target_id}/eval/utility/gen")
+            if mmlu is not None:
+                baseline_mmlu_per_target[target_id] = mmlu
+
+        # Run each unlearning step, suppressing all intermediate evals
+        for step_idx, step in enumerate(chain):
+            log.info(f"Chain step {step_idx + 1}/{len(chain)}: target={step.target}, layer={step.layer}")
+            with open_dict(config):
+                config.unlearning_target = step.target
+                config.task.training_module.pretrained_model_hook_layer = int(step.layer)
+            target_id = step.target
+            target_name = target_id.split("_", 1)[1].replace("_", " ")
+            _run_task(
+                config, target_id, target_name,
+                pre_trained_llm, pre_trained_llm_tokenizer, logger,
+            )
+
+        # Post-chain eval: USR/APR/GUR for every target on the final model
+        log.info("Post-chain evaluation across all targets")
+        _eval_targets(
+            pre_trained_llm, pre_trained_llm_tokenizer,
+            all_target_ids, device, logger,
+            baseline_mmlu_per_target=baseline_mmlu_per_target,
+            metric_prefix_fmt="post_chain/{}/",
+            stage_number=len(chain),
+        )
+    else:
+        target_id: str = config.unlearning_target
+        target_name = target_id.split("_", 1)[1].replace("_", " ")
+        _run_task(config, target_id, target_name, pre_trained_llm, pre_trained_llm_tokenizer, logger)
 
     wandb.finish()
 

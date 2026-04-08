@@ -16,6 +16,7 @@ from project.utils.callbacks import get_default_callbacks
 from project.utils.get_data_root import get_data_root
 import os
 import random
+from hydra.core.hydra_config import HydraConfig
 
 log = get_logger()
 
@@ -29,6 +30,7 @@ class UnlearningATU:
         pre_trained_llm: AutoModelForCausalLM,
         pre_trained_llm_tokenizer: AutoTokenizer,
         logger: Logger,
+        baseline_mmlu: float = None,
         **kwargs,
     ):
         self.global_config = global_config
@@ -38,8 +40,17 @@ class UnlearningATU:
         self.pre_trained_llm = pre_trained_llm
         self.pre_trained_llm_tokenizer = pre_trained_llm_tokenizer
         self.logger = logger
+        self.baseline_mmlu = baseline_mmlu
 
-    def unlearn(self):
+        # Build a unique save directory using Hydra's output dir to avoid collisions
+        run_name = self.global_config.wandb.get("name", "default")
+        hydra_run_dir = HydraConfig.get().run.dir
+        self.save_dir = os.path.join(hydra_run_dir, "checkpoints", run_name, self.target_id)
+        os.makedirs(self.save_dir, exist_ok=True)
+        log.info(f"Checkpoint directory: {self.save_dir}")
+
+    def unlearn(self) -> float:
+        """Run the full unlearning pipeline. Returns baseline_mmlu for GUR tracking."""
         log.info("Task: unlearning_atu")
 
         log.info("Validating config")
@@ -79,11 +90,18 @@ class UnlearningATU:
         other_target_ids = subfolders[:self.task_config.num_other_targets]
         random.shuffle(other_target_ids)
 
+        # tokenizer_variant is stashed on model.config by load_pre_trained_llm.
+        # Falls back to "phi" for backwards compatibility with the Phi setup.
+        tokenizer_variant = getattr(
+            self.pre_trained_llm.config, "tokenizer_variant", "phi"
+        )
+
         training_datamodule = instantiate(
             self.task_config.unlearning_data,
             primary_tokenizer=self.pre_trained_llm_tokenizer,
             secondary_tokenizer=text_encoder_tokenizer,
             target_ids=[self.target_id] + other_target_ids,
+            tokenizer_variant=tokenizer_variant,
         )
         training_datamodule.prepare_data()
         training_datamodule.setup("train")
@@ -94,11 +112,13 @@ class UnlearningATU:
             primary_tokenizer=self.pre_trained_llm_tokenizer,
             secondary_tokenizer=text_encoder_tokenizer,
             target_ids=[self.target_id],
+            tokenizer_variant=tokenizer_variant,
         )
         unlearning_datamodule.prepare_data()
         unlearning_datamodule.setup("train")
 
         log.info("Instantiating UnlearningATU")
+        checkpoint_interval = self.task_config.get("checkpoint_interval", None)
         task = UnlearningATUTrainingModule(
             embedding_prediction_model=embedding_prediction_model,
             pre_trained_llm=self.pre_trained_llm,
@@ -106,6 +126,8 @@ class UnlearningATU:
             text_encoder=text_encoder,
             text_encoder_tokenizer=text_encoder_tokenizer,
             unlearning_target=self.target_name,
+            save_dir=self.save_dir,
+            checkpoint_interval=checkpoint_interval,
             **self.task_config.training_module,
         )
 
@@ -118,18 +140,25 @@ class UnlearningATU:
             enable_checkpointing=False,
         )
 
+        metric_prefix = f"target/{self.target_id}/"
+
         log.info("Starting initial evaluation!")
-        if not self.global_config.skip_initial_eval:
+        baseline_mmlu = self.baseline_mmlu
+        if self.global_config.skip_initial_eval:
+            log.info("Skipping initial evaluation!")
+        else:
             results = eval_llm(
                 self.pre_trained_llm,
                 self.pre_trained_llm_tokenizer,
                 self.target_id,
                 trainer.strategy.root_device,
                 0,
+                metric_prefix=metric_prefix,
             )
             trainer.logger.log_metrics(results)
-        else:
-            log.info("Skipping initial evaluation!")
+            if baseline_mmlu is None:
+                baseline_mmlu = results.get(f"{metric_prefix}eval/utility/gen")
+            log.info(f"Baseline MMLU: {baseline_mmlu}")
 
         log.info("Starting training!")
 
@@ -164,12 +193,17 @@ class UnlearningATU:
                 raise ValueError(f"Invalid stage: {stage['type']}")
             log.info(f"Stage {idx + 1} ({stage['type']}) completed!")
 
-            run_name = self.global_config.wandb.get("name", "default")
-            save_dir = f"/content/drive/MyDrive/align-then-unlearn/checkpoints/{run_name}"
-            os.makedirs(save_dir, exist_ok=True)
-            torch.save(task.pre_trained_llm.state_dict(), f"{save_dir}/pre_trained_llm.pt")
-            torch.save(task.embedding_prediction_model.state_dict(), f"{save_dir}/embedding_prediction_model.pt")
-            log.info(f"Stage {idx + 1} weights saved to {save_dir}")
+            is_last_stage = idx == len(self.task_config.stages) - 1
+            if is_last_stage:
+                torch.save(task.pre_trained_llm.state_dict(), f"{self.save_dir}/unlearned_pre_trained_llm.pt")
+                torch.save(task.embedding_prediction_model.state_dict(), f"{self.save_dir}/unlearned_embedding_prediction_model.pt")
+            else:
+                torch.save(task.pre_trained_llm.state_dict(), f"{self.save_dir}/pre_trained_llm.pt")
+                torch.save(task.embedding_prediction_model.state_dict(), f"{self.save_dir}/embedding_prediction_model.pt")
+            # Write a small metadata file so it's clear what stage was last saved
+            with open(f"{self.save_dir}/last_stage.txt", "w") as f:
+                f.write(f"stage {idx + 1}/{len(self.task_config.stages)} ({stage['type']})\n")
+            log.info(f"Stage {idx + 1} weights saved to {self.save_dir}")
 
             if stage["type"] == "unlearning":
                 log.info("Starting testing!")
@@ -179,9 +213,12 @@ class UnlearningATU:
                     self.target_id,
                     device=trainer.strategy.root_device,
                     stage_number=idx + 1,
+                    baseline_mmlu=baseline_mmlu,
+                    metric_prefix=metric_prefix,
                 )
                 trainer.logger.log_metrics(results)
         log.info("Unlearning complete!")
+        return baseline_mmlu
 
 
 class UnlearningATUTrainingModule(pl.LightningModule):
@@ -200,6 +237,8 @@ class UnlearningATUTrainingModule(pl.LightningModule):
         unlearning_weight_decay: float,
         pretrained_model_hook_layer: int,
         clip_grad_norm: float,
+        save_dir: str = None,
+        checkpoint_interval: int = None,
         stage: Literal["training", "unlearning"] = "training",
         **kwargs,
     ):
@@ -208,6 +247,8 @@ class UnlearningATUTrainingModule(pl.LightningModule):
             ignore=("embedding_prediction_model", "pre_trained_llm", "text_encoder")
         )
         self.unlearning_similarity_threshold = None
+        self.save_dir = save_dir
+        self.checkpoint_interval = checkpoint_interval
         self.embedding_prediction_model = embedding_prediction_model
         self.pre_trained_llm = pre_trained_llm
         self.pre_trained_llm_tokenizer = pre_trained_llm_tokenizer
@@ -246,6 +287,54 @@ class UnlearningATUTrainingModule(pl.LightningModule):
         for param in model.parameters():
             param.requires_grad = True
 
+    def _unfreeze_hooked_layer_only(self):
+        """Freeze the entire pre_trained_llm, then unfreeze only the decoder
+        block whose *output* is `hidden_states[hook_layer]`.
+
+        Rationale: hidden_states[k] is the output of transformer block k-1
+        (index 0 is the embedding). So the block to edit is
+        `model.model.layers[hook_layer - 1]`. On MoE models this confines
+        updates to a single block's experts + router, instead of silently
+        updating every expert in the stack.
+        """
+        hook_layer = self.hparams.pretrained_model_hook_layer
+        assert hook_layer >= 1, (
+            f"pretrained_model_hook_layer must be >= 1 to map to a decoder "
+            f"block; got {hook_layer}"
+        )
+
+        # Freeze everything first
+        self._disable_grad(self.pre_trained_llm)
+
+        # Resolve the layer list (standard HF causal-LM path)
+        layers = getattr(
+            getattr(self.pre_trained_llm, "model", None), "layers", None
+        )
+        if layers is None:
+            raise RuntimeError(
+                "Could not locate `pre_trained_llm.model.layers` for layer-"
+                "scoped unfreezing. Check model architecture."
+            )
+        block_idx = hook_layer - 1
+        if not 0 <= block_idx < len(layers):
+            raise IndexError(
+                f"hook_layer={hook_layer} out of range for {len(layers)} "
+                f"decoder blocks (valid: 1..{len(layers)})"
+            )
+
+        target_block = layers[block_idx]
+        self._enable_grad(target_block)
+
+        trainable = sum(
+            p.numel() for p in self.pre_trained_llm.parameters() if p.requires_grad
+        )
+        total = sum(p.numel() for p in self.pre_trained_llm.parameters())
+        log.info(
+            f"Layer-scoped unfreeze: block {block_idx} "
+            f"(hidden_states[{hook_layer}]) -> {trainable:,}/{total:,} "
+            f"params trainable ({100 * trainable / total:.2f}%)"
+        )
+
     def update_stage(self, stage: Literal["training", "unlearning"]):
         log.info(f"Updating stage to {stage}")
         self.stage = stage
@@ -259,7 +348,9 @@ class UnlearningATUTrainingModule(pl.LightningModule):
         elif self.stage == "unlearning":
             self._disable_grad(self.text_encoder)
             self._enable_grad(self.embedding_prediction_model)
-            self._enable_grad(self.pre_trained_llm)
+            # MoE-safe: only unfreeze the single decoder block the causal
+            # trace picked. Avoids silently updating untouched experts.
+            self._unfreeze_hooked_layer_only()
             self.pre_trained_llm.train()
             self.embedding_prediction_model.eval()
             self.text_encoder.eval()
@@ -386,6 +477,20 @@ class UnlearningATUTrainingModule(pl.LightningModule):
         else:
             self.log("train/unlearning_loss", loss.mean(), batch_size=batch_size)
             self.log("train/unlearning_threshold", self.unlearning_similarity_threshold)
+
+        # Interval checkpointing
+        if (
+            self.save_dir is not None
+            and self.checkpoint_interval is not None
+            and self.global_step % self.checkpoint_interval == 0
+            and self.global_step > 0
+        ):
+            ckpt_dir = os.path.join(self.save_dir, f"step_{self.global_step}")
+            os.makedirs(ckpt_dir, exist_ok=True)
+            torch.save(self.pre_trained_llm.state_dict(), f"{ckpt_dir}/pre_trained_llm.pt")
+            torch.save(self.embedding_prediction_model.state_dict(), f"{ckpt_dir}/embedding_prediction_model.pt")
+            log.info(f"Interval checkpoint saved to {ckpt_dir}")
+
         return {"loss": loss}
 
     def configure_optimizers(self):

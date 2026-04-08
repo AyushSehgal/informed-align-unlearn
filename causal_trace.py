@@ -12,9 +12,12 @@ Usage:
         --top_k 5
 """
 
+import os
 import torch
 import numpy as np
+import json
 import argparse
+from pathlib import Path
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import Optional, Dict, List, Tuple
 
@@ -181,53 +184,119 @@ def get_top_predictions(
     tokenizer: AutoTokenizer,
     prompt: str,
     k: int = 5,
-) -> List[Tuple[str, float]]:
-    """Get top-k next token predictions for a prompt."""
+) -> List[Tuple[int, str, float]]:
+    """Get top-k next token predictions for a prompt.
+
+    Returns list of (token_id, decoded_token, probability) tuples.
+    Probabilities are computed over the full vocabulary (not just top-k).
+    """
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
     with torch.no_grad():
         out = model(**inputs)
     logits = out.logits[0, -1, :]
-    topk = torch.topk(logits.float(), k)
-    probs = torch.softmax(topk.values, dim=-1).tolist()
+    full_probs = torch.softmax(logits.float(), dim=-1)
+    topk = torch.topk(full_probs, k)
     tokens = [tokenizer.decode(t) for t in topk.indices]
-    return list(zip(tokens, probs))
+    return list(zip(topk.indices.tolist(), tokens, topk.values.tolist()))
+
+
+def greedy_decode(
+    model: AutoModelForCausalLM,
+    tokenizer: AutoTokenizer,
+    prompt: str,
+    num_tokens: int,
+) -> List[int]:
+    """Greedily decode num_tokens from the model given a prompt."""
+    input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
+    generated = []
+    for _ in range(num_tokens):
+        with torch.no_grad():
+            out = model(input_ids)
+        next_id = out.logits[0, -1, :].argmax().item()
+        generated.append(next_id)
+        input_ids = torch.cat(
+            [input_ids, torch.tensor([[next_id]], device=model.device)], dim=1
+        )
+    return generated
+
+
+def compute_token_overlap(
+    generated_ids: List[int],
+    expected_ids: List[int],
+) -> float:
+    """
+    Compute positional token overlap between generated and expected token
+    sequences.
+
+    Returns fraction of positions where generated matches expected (0.0-1.0).
+    Comparison length is the shorter of the two sequences.
+    """
+    compare_len = min(len(generated_ids), len(expected_ids))
+    if compare_len == 0:
+        return 0.0
+    matches = sum(
+        1 for g, e in zip(generated_ids[:compare_len], expected_ids[:compare_len])
+        if g == e
+    )
+    return matches / compare_len
 
 
 def build_tracing_items(
     model: AutoModelForCausalLM,
     tokenizer: AutoTokenizer,
     items: List[Dict],
-    min_prob: float = 0.05,
+    min_overlap: float = 0.5,
 ) -> List[Dict]:
     """
-    Verify tracing prompts by checking model predictions.
-    Filters out items where the model doesn't confidently predict the answer.
+    Verify tracing prompts by greedy-decoding the expected number of answer
+    tokens and checking positional overlap against the expected answer.
+
+    A prompt is accepted if at least min_overlap fraction of the answer tokens
+    match at each position (default 50%). This avoids both the old string-
+    mismatch bug and false positives from only checking the first token.
+
+    Args:
+        model: The LLM to verify against
+        tokenizer: Corresponding tokenizer
+        items: List of dicts with 'prompt', 'subject', 'answer' keys
+        min_overlap: Minimum fraction of token positions that must match
+                     (0.0-1.0, default 0.5)
     """
     valid_items = []
     print("Verifying tracing prompts...")
     for item in items:
-        preds = get_top_predictions(model, tokenizer, item["prompt"])
-        token_id = tokenizer.encode(item["answer"], add_special_tokens=False)[0]
-        item["answer_token_id"] = token_id
+        # Tokenize the expected answer
+        answer_token_ids = tokenizer.encode(
+            item["answer"], add_special_tokens=False
+        )
+        num_answer_tokens = len(answer_token_ids)
 
-        # Check if answer is in top predictions
-        answer_prob = 0.0
-        for token, prob in preds:
-            if token.strip() == item["answer"].strip():
-                answer_prob = prob
-                break
+        # The first token is still what we trace (causal_trace_single uses it)
+        item["answer_token_id"] = answer_token_ids[0]
 
-        top_token = preds[0][0]
-        print(
-            f"  '{item['prompt']}' -> "
-            f"top='{top_token}' | "
-            f"P('{item['answer']}')={answer_prob:.3f}"
+        # Greedy decode the same number of tokens
+        generated_ids = greedy_decode(
+            model, tokenizer, item["prompt"], num_answer_tokens
         )
 
-        if answer_prob >= min_prob:
+        overlap = compute_token_overlap(generated_ids, answer_token_ids)
+
+        generated_str = tokenizer.decode(generated_ids)
+        expected_str = tokenizer.decode(answer_token_ids)
+        num_matches = sum(
+            1 for g, e in zip(generated_ids, answer_token_ids) if g == e
+        )
+        print(
+            f"  '{item['prompt']}' -> "
+            f"generated='{generated_str}' | "
+            f"expected='{expected_str}' | "
+            f"overlap={overlap:.0%} ({num_matches}/{num_answer_tokens} tokens)"
+        )
+
+        if overlap >= min_overlap:
             valid_items.append(item)
         else:
-            print(f"    SKIPPED (prob {answer_prob:.3f} < {min_prob})")
+            print(f"    SKIPPED (overlap {overlap:.0%} < {min_overlap:.0%})")
 
     print(f"\n{len(valid_items)}/{len(items)} prompts valid\n")
     return valid_items
@@ -318,44 +387,58 @@ def print_results(
         print(f"  #{rank + 1}: Layer {layer} (recovery={recovery:.4f})")
 
 
-# ---- Default Stephen King tracing prompts ----
-STEPHEN_KING_PROMPTS = [
-    {
-        "prompt": "The Shining was written by",
-        "subject": "The Shining",
-        "answer": "Stephen",
-    },
-    {
-        "prompt": "Stephen King is famous for writing",
-        "subject": "Stephen King",
-        "answer": "horror",
-    },
-    {
-        "prompt": "Carrie is a novel by Stephen",
-        "subject": "Carrie",
-        "answer": "King",
-    },
-    {
-        "prompt": "The Dark Tower series was written by Stephen",
-        "subject": "Dark Tower",
-        "answer": "King",
-    },
-    {
-        "prompt": "Stephen King is a famous American",
-        "subject": "Stephen King",
-        "answer": "author",
-    },
-    {
-        "prompt": "Pet Sematary was written by",
-        "subject": "Pet Sematary",
-        "answer": "Stephen",
-    },
-    {
-        "prompt": "It, the horror novel, was written by",
-        "subject": "horror novel",
-        "answer": "Stephen",
-    },
-]
+def load_rwku_tracing_items(
+    target_id: str,
+    data_root: Path = None,
+    levels: List[int] = None,
+) -> List[Dict]:
+    """
+    Load tracing prompts from RWKU forget_level JSON files.
+
+    Converts cloze-style queries (with ___) into prompts by taking the text
+    before the blank as the prompt, and using the answer as the expected completion.
+
+    Args:
+        target_id: Target folder name (e.g., "1_Stephen_King")
+        data_root: Path to RWKU Target directory. Defaults to data/rwku/benchmark/Target.
+        levels: Which forget levels to load (default: [1, 2, 3])
+    """
+    if data_root is None:
+        data_root = Path(__file__).parent / "data" / "rwku" / "benchmark" / "Target"
+    if levels is None:
+        levels = [1, 2, 3]
+
+    target_dir = data_root / target_id
+    items = []
+    seen_prompts = set()
+
+    for level in levels:
+        filepath = target_dir / f"forget_level{level}.json"
+        if not filepath.exists():
+            print(f"Warning: {filepath} not found, skipping")
+            continue
+
+        with open(filepath, "r") as f:
+            data = json.load(f)
+
+        for entry in data:
+            query = entry["query"]
+            # Split at the blank to get the prompt (text before ___)
+            if "___" not in query:
+                continue
+            prompt = query.split("___")[0].rstrip()
+            if not prompt or prompt in seen_prompts:
+                continue
+            seen_prompts.add(prompt)
+
+            items.append({
+                "prompt": prompt,
+                "subject": entry["subject"],
+                "answer": entry["answer"],
+            })
+
+    print(f"Loaded {len(items)} tracing prompts from {target_dir}")
+    return items
 
 
 def main():
@@ -367,8 +450,16 @@ def main():
         help="HuggingFace model name",
     )
     parser.add_argument(
-        "--target", type=str, default="Stephen King",
-        help="Target entity name",
+        "--target_id", type=str, default="1_Stephen_King",
+        help="Target folder name in RWKU data (e.g., 1_Stephen_King, 9_Justin_Bieber)",
+    )
+    parser.add_argument(
+        "--data_root", type=str, default="data/rwku/benchmark/Target",
+        help="Path to RWKU Target directory (default: data/rwku/benchmark/Target)",
+    )
+    parser.add_argument(
+        "--levels", type=int, nargs="+", default=[1, 2, 3],
+        help="Which forget levels to load (default: 1 2 3)",
     )
     parser.add_argument(
         "--top_k", type=int, default=5,
@@ -383,6 +474,20 @@ def main():
         choices=["float32", "float16", "bfloat16"],
         help="Model dtype",
     )
+    parser.add_argument(
+        "--min_overlap", type=float, default=0.5,
+        help="Minimum token overlap fraction for prompt validation (0.0-1.0)",
+    )
+    parser.add_argument(
+        "--trust_remote_code", action="store_true",
+        help="Pass trust_remote_code=True to AutoModelForCausalLM (required "
+             "for some models, e.g. Qwen3.5)",
+    )
+    parser.add_argument(
+        "--device_map", type=str, default=None,
+        help="HuggingFace device_map (e.g. 'auto'). If unset, the model is "
+             "loaded on CPU and manually moved to cuda.",
+    )
     args = parser.parse_args()
 
     # Load model
@@ -392,10 +497,19 @@ def main():
         "bfloat16": torch.bfloat16,
     }
     print(f"Loading {args.model}...")
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model, torch_dtype=dtype_map[args.dtype]
-    ).to("cuda").eval()
-    tokenizer = AutoTokenizer.from_pretrained(args.model)
+    load_kwargs = {"torch_dtype": dtype_map[args.dtype]}
+    if args.trust_remote_code:
+        load_kwargs["trust_remote_code"] = True
+    if args.device_map is not None:
+        load_kwargs["device_map"] = args.device_map
+    model = AutoModelForCausalLM.from_pretrained(args.model, **load_kwargs)
+    if args.device_map is None:
+        model = model.to("cuda")
+    model = model.eval()
+    tokenizer_kwargs = {}
+    if args.trust_remote_code:
+        tokenizer_kwargs["trust_remote_code"] = True
+    tokenizer = AutoTokenizer.from_pretrained(args.model, **tokenizer_kwargs)
     num_layers = model.config.num_hidden_layers
 
     # Compute noise level
@@ -406,15 +520,14 @@ def main():
     print(f"Noise std: {noise_std:.4f} ({args.noise_multiplier}x embedding std)")
     print(f"Number of layers: {num_layers}")
 
-    # Select prompts
-    if args.target == "Stephen King":
-        tracing_items = STEPHEN_KING_PROMPTS
-    else:
-        print(f"No default prompts for '{args.target}'. Using Stephen King prompts.")
-        tracing_items = STEPHEN_KING_PROMPTS
+    # Load prompts from RWKU data
+    data_root = Path(args.data_root) if args.data_root else None
+    tracing_items = load_rwku_tracing_items(args.target_id, data_root, args.levels)
 
     # Verify prompts
-    valid_items = build_tracing_items(model, tokenizer, tracing_items)
+    valid_items = build_tracing_items(
+        model, tokenizer, tracing_items, min_overlap=args.min_overlap
+    )
 
     if not valid_items:
         print("ERROR: No valid tracing prompts. Model may not know this entity.")
@@ -422,7 +535,7 @@ def main():
 
     # Run tracing
     print("=" * 60)
-    print(f"CAUSAL TRACING: {args.target}")
+    print(f"CAUSAL TRACING: {args.target_id}")
     print("=" * 60)
 
     avg_recovery = run_causal_tracing(
@@ -440,6 +553,29 @@ def main():
 
     # Return top-k for programmatic use
     top_layers = get_top_k_layers(avg_recovery, args.top_k)
+
+    # Save results to outputs/causal_trace/{target_id}/
+    output_dir = os.path.join("outputs", "causal_trace", args.target_id)
+    os.makedirs(output_dir, exist_ok=True)
+
+    results = {
+        "target_id": args.target_id,
+        "model": args.model,
+        "num_layers": num_layers,
+        "noise_std": noise_std,
+        "noise_multiplier": args.noise_multiplier,
+        "levels": args.levels,
+        "num_prompts_used": len(valid_items),
+        "avg_recovery": {str(k): v for k, v in avg_recovery.items()},
+        "top_k_layers": [{"layer": layer, "recovery": recovery} for layer, recovery in top_layers],
+        "peak_layer": int(max(avg_recovery, key=avg_recovery.get)),
+    }
+
+    output_file = os.path.join(output_dir, "results.json")
+    with open(output_file, "w") as f:
+        json.dump(results, f, indent=2)
+    print(f"\nResults saved to {output_file}")
+
     return avg_recovery, top_layers
 
 

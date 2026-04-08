@@ -24,6 +24,7 @@ class RWKUPositiveDataset(Dataset):
         context_window_length: int,
         primary_tokenizer: AutoTokenizer,
         secondary_tokenizer: AutoTokenizer | None = None,
+        tokenizer_variant: str = "phi",
     ):
         primary_tokenizer.pad_token = primary_tokenizer.eos_token
         if secondary_tokenizer is not None:
@@ -33,13 +34,35 @@ class RWKUPositiveDataset(Dataset):
         self.max_input_length = max_input_length
         self.context_window_length = context_window_length
 
+        # Pick the positive_{variant}.json file. The file stores raw text,
+        # so for new tokenizers we can fall back to positive_phi.json and
+        # retokenize on the fly.
+        candidate_files = [
+            data_root / target_id / f"positive_{tokenizer_variant}.json",
+            data_root / target_id / "positive_phi.json",
+        ]
+        positive_path = None
+        for candidate in candidate_files:
+            if candidate.exists():
+                positive_path = candidate
+                break
+        if positive_path is None:
+            raise FileNotFoundError(
+                f"No positive data found for {target_id}. Tried: "
+                f"{[str(c) for c in candidate_files]}"
+            )
+
         self.texts = []
-        with open(data_root / target_id / "positive_phi.json", "r") as f:
+        with open(positive_path, "r") as f:
             entries = json.load(f)
             for entry in entries:
                 self.texts.append(entry["text"])
 
         assert len(self.texts) > 0, f"No positive texts found for target {target_id}"
+        log.info(
+            f"Loaded {len(self.texts)} positive texts for {target_id} "
+            f"from {positive_path.name}"
+        )
 
     def __len__(self):
         return len(self.texts)
@@ -137,6 +160,7 @@ class RWKUPositiveDataModule(pl.LightningDataModule):
         context_window_length: int,
         primary_tokenizer: AutoTokenizer,
         secondary_tokenizer: AutoTokenizer | None = None,
+        tokenizer_variant: str = "phi",
         **kwargs,
     ):
         super().__init__()
@@ -147,6 +171,7 @@ class RWKUPositiveDataModule(pl.LightningDataModule):
         self.secondary_tokenizer = secondary_tokenizer
         self.max_input_length = max_input_length
         self.context_window_length = context_window_length
+        self.tokenizer_variant = tokenizer_variant
         self.datasets = [
             RWKUPositiveDataset(
                 target_id=target_id,
@@ -154,6 +179,7 @@ class RWKUPositiveDataModule(pl.LightningDataModule):
                 secondary_tokenizer=self.secondary_tokenizer,
                 max_input_length=self.max_input_length,
                 context_window_length=self.context_window_length,
+                tokenizer_variant=self.tokenizer_variant,
             )
             for target_id in self.target_ids
         ]
