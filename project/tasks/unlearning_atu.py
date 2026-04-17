@@ -350,7 +350,7 @@ class UnlearningATUTrainingModule(pl.LightningModule):
                 )
 
             # Train each prediction module on its layer's hidden states
-            total_loss = 0.0
+            layer_losses = []
             for layer_idx_str, pred_model in self.embedding_prediction_models.items():
                 layer_idx = int(layer_idx_str)
                 hidden_states = pretrained_outputs.hidden_states[layer_idx]
@@ -360,11 +360,13 @@ class UnlearningATUTrainingModule(pl.LightningModule):
                 )  # shape (batch_size, max_length)
                 layer_loss = layer_loss * has_full_window
                 layer_loss = layer_loss.sum() / (has_full_window.sum() + 1e-8)
-                total_loss = total_loss + layer_loss
+                layer_losses.append(layer_loss)
 
                 self.log(f"train/training_loss_layer{layer_idx}", layer_loss, batch_size=batch_size)
 
-            loss = total_loss / len(self.embedding_prediction_models)
+            layer_losses_tensor = torch.stack(layer_losses)
+            weights = torch.softmax(layer_losses_tensor.detach(), dim=0)
+            loss = (weights * layer_losses_tensor).sum()
             assert not torch.isnan(loss), "Loss is NaN"
 
             opt_list[0].zero_grad()
@@ -397,7 +399,7 @@ class UnlearningATUTrainingModule(pl.LightningModule):
                 "Unlearning similarity threshold must be set before unlearning stage"
             )
 
-            total_loss = 0.0
+            layer_losses = []
             for layer_idx_str, pred_model in self.embedding_prediction_models.items():
                 layer_idx = int(layer_idx_str)
                 hidden_states = pretrained_outputs.hidden_states[layer_idx]
@@ -411,11 +413,13 @@ class UnlearningATUTrainingModule(pl.LightningModule):
                     )
                     - self.unlearning_similarity_threshold
                 ).mean()
-                total_loss = total_loss + layer_loss
+                layer_losses.append(layer_loss)
 
                 self.log(f"train/unlearning_loss_layer{layer_idx}", layer_loss, batch_size=batch_size)
 
-            loss = total_loss / len(self.embedding_prediction_models)
+            layer_losses_tensor = torch.stack(layer_losses)
+            weights = torch.softmax(layer_losses_tensor.detach(), dim=0)
+            loss = (weights * layer_losses_tensor).sum()
             assert not torch.isnan(loss), "Loss is NaN"
 
             opt_list[1].zero_grad()
