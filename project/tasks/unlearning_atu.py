@@ -349,9 +349,9 @@ class UnlearningATUTrainingModule(pl.LightningModule):
                     attention_mask=attention_mask,
                 )
 
-            # Train each prediction module on its layer's hidden states
-            layer_losses = []
-            for layer_idx_str, pred_model in self.embedding_prediction_models.items():
+            # Train each prediction module independently with its own optimizer
+            total_grad_norm = 0.0
+            for i, (layer_idx_str, pred_model) in enumerate(self.embedding_prediction_models.items()):
                 layer_idx = int(layer_idx_str)
                 hidden_states = pretrained_outputs.hidden_states[layer_idx]
                 outputs = pred_model(hidden_states)
@@ -360,23 +360,20 @@ class UnlearningATUTrainingModule(pl.LightningModule):
                 )  # shape (batch_size, max_length)
                 layer_loss = layer_loss * has_full_window
                 layer_loss = layer_loss.sum() / (has_full_window.sum() + 1e-8)
-                layer_losses.append(layer_loss)
+                assert not torch.isnan(layer_loss), f"Loss is NaN at layer {layer_idx}"
 
                 self.log(f"train/training_loss_layer{layer_idx}", layer_loss, batch_size=batch_size)
 
-            layer_losses_tensor = torch.stack(layer_losses)
-            weights = torch.softmax(layer_losses_tensor.detach(), dim=0)
-            loss = (weights * layer_losses_tensor).sum()
-            assert not torch.isnan(loss), "Loss is NaN"
+                opt_list[i].zero_grad()
+                self.manual_backward(layer_loss)
+                grad_norm = torch.nn.utils.clip_grad_norm_(
+                    pred_model.parameters(), max_norm=self.hparams.clip_grad_norm
+                )
+                total_grad_norm += grad_norm.item()
+                opt_list[i].step()
 
-            opt_list[0].zero_grad()
-            self.manual_backward(loss)
-            grad_norm = torch.nn.utils.clip_grad_norm_(
-                self.embedding_prediction_models.parameters(),
-                max_norm=self.hparams.clip_grad_norm,
-            )
-            self.log("train/grad_norm_embedding_clip", grad_norm, batch_size=batch_size)
-            opt_list[0].step()
+            loss = layer_loss  # last layer loss for logging below
+            self.log("train/grad_norm_embedding_clip", total_grad_norm / len(self.embedding_prediction_models), batch_size=batch_size)
 
             if batch_idx == 0:
                 # Sanity checks on the last layer's outputs
@@ -422,13 +419,14 @@ class UnlearningATUTrainingModule(pl.LightningModule):
             loss = (weights * layer_losses_tensor).sum()
             assert not torch.isnan(loss), "Loss is NaN"
 
-            opt_list[1].zero_grad()
+            llm_opt = opt_list[-1]
+            llm_opt.zero_grad()
             self.manual_backward(loss)
             grad_norm = torch.nn.utils.clip_grad_norm_(
                 self.pre_trained_llm.parameters(), max_norm=self.hparams.clip_grad_norm
             )
             self.log("train/grad_norm_pre_clip", grad_norm, batch_size=batch_size)
-            opt_list[1].step()
+            llm_opt.step()
         else:
             raise ValueError(f"Invalid stage: {self.stage}")
 
@@ -441,17 +439,18 @@ class UnlearningATUTrainingModule(pl.LightningModule):
         return {"loss": loss}
 
     def configure_optimizers(self):
-        return [
-            # Optimizer 0: all prediction modules (used during training stage)
+        # One optimizer per prediction module (indices 0..N-1), LLM optimizer last (index N)
+        layer_optimizers = [
             torch.optim.Adam(
-                self.embedding_prediction_models.parameters(),
+                model.parameters(),
                 lr=self.hparams.training_lr,
                 weight_decay=self.hparams.training_weight_decay,
-            ),
-            # Optimizer 1: LLM (used during unlearning stage)
-            torch.optim.SGD(
-                self.pre_trained_llm.parameters(),
-                lr=self.hparams.unlearning_lr,
-                weight_decay=self.hparams.unlearning_weight_decay,
-            ),
+            )
+            for model in self.embedding_prediction_models.values()
         ]
+        llm_optimizer = torch.optim.SGD(
+            self.pre_trained_llm.parameters(),
+            lr=self.hparams.unlearning_lr,
+            weight_decay=self.hparams.unlearning_weight_decay,
+        )
+        return layer_optimizers + [llm_optimizer]
