@@ -17,8 +17,8 @@ exp: atu-unlearning
 
 wandb:
   id: ~
-  entity: savior
-  project: align-then-unlearn
+  entity: ayushseh-carnegie-mellon-university
+  project: idl-project-unlearning
   group: ~
   name: atu-layer4-phi3.5-mini
   mode: ~

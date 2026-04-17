@@ -1,11 +1,16 @@
 #!/bin/bash
-#SBATCH -p GPU-shared
-#SBATCH --gres=gpu:h100-80:1
-#SBATCH -t 12:00:00
-#SBATCH -A cis250019p
 #SBATCH --job-name=atu_multi_layer
-#SBATCH --output=output_%j.log
-#SBATCH --error=error_%j.log
+#SBATCH --output=/data/user_data/ayushseh/informed-align-unlearn/logs/unlearn/multi-layer_%j.out
+#SBATCH --error=/data/user_data/ayushseh/informed-align-unlearn/logs/unlearn/multi-layer_%j.err
+#SBATCH --time=24:00:00
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=64G
+#SBATCH --partition=general
+
+PROJECT_DIR="/data/user_data/ayushseh/informed-align-unlearn"
+LOG_DIR="${PROJECT_DIR}/logs/unlearn"
+JOB_SUFFIX="multi-layer"
 
 # ==============================================================================
 # Multi-Layer ATU Training Script
@@ -31,13 +36,13 @@ set -e
 # --- Environment setup ---
 # Use pure-Python protobuf to avoid GLIBCXX_3.4.29 not found on compute nodes
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
-module load anaconda3
-conda activate informed-align-unlearn
-cd /jet/home/apatawar/informed-align-unlearn
-source .env
 
-# Use shared HF cache on PSC
-export HF_HUB_CACHE="/ocean/projects/cis250260p/shared/hf_cache"
+export HF_HOME=/data/user_data/ayushseh/.hf_cache
+export HF_HUB_CACHE=/data/hf_cache/hub
+export HF_DATASETS_CACHE=/data/hf_cache/datasets
+
+cd /data/user_data/ayushseh/informed-align-unlearn
+source idl/venv/bin/activate
 
 UNLEARNING_TARGET="1_Stephen_King"
 

@@ -3,7 +3,7 @@ from pathlib import Path
 from lightning.pytorch import Trainer
 from lightning.pytorch.plugins.environments import SLURMEnvironment
 from project.eval import eval_llm
-from hydra.utils import instantiate
+from hydra.utils import instantiate, get_original_cwd
 import torch
 import torch.nn as nn
 import lightning.pytorch as pl
@@ -192,8 +192,7 @@ class UnlearningATU:
             log.info(f"Stage {idx + 1} ({stage['type']}) completed!")
 
             run_name = self.global_config.wandb.get("name", "default")
-            project_root = Path(__file__).parent.parent.parent
-            save_dir = str(project_root / "checkpoints" / run_name)
+            save_dir = str(Path(get_original_cwd()) / "checkpoints" / run_name)
             os.makedirs(save_dir, exist_ok=True)
             torch.save(task.pre_trained_llm.state_dict(), f"{save_dir}/pre_trained_llm.pt")
             # Save all prediction models
