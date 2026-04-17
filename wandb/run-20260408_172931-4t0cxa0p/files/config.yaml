@@ -1,0 +1,258 @@
+_wandb:
+    value:
+        cli_version: 0.25.1
+        e:
+            kh996334kuzvvdvdo0kwg4a3vpf7ovmw:
+                args:
+                    - unlearning_target=1_Stephen_King
+                    - task.training_module.pretrained_model_hook_layers=[4,15,29]
+                    - wandb.name=atu-multi-4-15-29
+                codePath: launch_training.py
+                codePathLocal: launch_training.py
+                cpu_count: 192
+                cpu_count_logical: 192
+                cudaVersion: "12.6"
+                disk:
+                    /:
+                        total: "75125227520"
+                        used: "29667737600"
+                email: savioratharv2003@gmail.com
+                executable: /opt/packages/anaconda3-2024.10-1/bin/python
+                git:
+                    commit: 6d8dbc0c69714e5f73eb54b3d1d8eda0c3612e6b
+                    remote: https://github.com/AyushSehgal/informed-align-unlearn.git
+                gpu: NVIDIA L40S
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ada
+                      cudaCores: 18176
+                      memoryTotal: "48305799168"
+                      name: NVIDIA L40S
+                      uuid: GPU-1569cb2e-2050-1ff4-fd00-bf3c5086963c
+                host: gl001.ib.bridges2.psc.edu
+                memory:
+                    total: "1081385123840"
+                os: Linux-4.18.0-553.74.1.el8_10.x86_64-x86_64-with-glibc2.28
+                program: /jet/home/apatawar/informed-align-unlearn/launch_training.py
+                python: CPython 3.12.7
+                root: .
+                slurm:
+                    cluster_name: bridges2
+                    conf: /var/spool/slurm/d/conf-cache/slurm.conf
+                    cpus_on_node: "24"
+                    export_env: ALL
+                    get_user_env: "1"
+                    gpus_on_node: "1"
+                    gtids: "0"
+                    job_account: cis250260p
+                    job_cpus_per_node: "24"
+                    job_gid: "26783"
+                    job_gpus: "4"
+                    job_id: "38643644"
+                    job_name: atu_multi_layer
+                    job_nodelist: gl001
+                    job_num_nodes: "1"
+                    job_partition: GPU-shared
+                    job_qos: gpu
+                    job_uid: "101448"
+                    job_user: apatawar
+                    jobid: "38643644"
+                    localid: "0"
+                    nnodes: "1"
+                    node_aliases: (null)
+                    nodeid: "0"
+                    nodelist: gl001
+                    prio_process: "0"
+                    procid: "0"
+                    script_context: prolog_task
+                    submit_dir: /jet/home/apatawar/informed-align-unlearn
+                    submit_host: br011.ib.bridges2.psc.edu
+                    task_pid: "26627"
+                    tasks_per_node: "24"
+                    topology_addr: gl001
+                    topology_addr_pattern: node
+                    working_cluster: bridges2:br003:6810:9728:109
+                startedAt: "2026-04-08T21:29:31.183351Z"
+                writerId: kh996334kuzvvdvdo0kwg4a3vpf7ovmw
+        m:
+            - "1": trainer/global_step
+              "6":
+                - 3
+              "7": []
+            - "2": '*'
+              "5": 1
+              "6":
+                - 1
+              "7": []
+        python_version: 3.12.7
+        t:
+            "1":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 50
+                - 53
+                - 106
+            "2":
+                - 1
+                - 5
+                - 11
+                - 41
+                - 49
+                - 50
+                - 53
+                - 106
+            "3":
+                - 2
+                - 7
+                - 13
+                - 41
+                - 66
+            "4": 3.12.7
+            "5": 0.25.1
+            "6": 4.51.3
+            "12": 0.25.1
+            "13": linux-x86_64
+early_stopping:
+    value: null
+embedding_prediction_models:
+    value:
+        params-not-trainable: 0
+        params-total: 178983936
+        params-trainable: 178983936
+exp:
+    value: atu-unlearning
+host:
+    value: gl001.ib.bridges2.psc.edu
+matmul_precision:
+    value: medium
+name:
+    value: unlearning-1_Stephen_King
+pre_trained_llm:
+    value:
+        _target_: project.pre_trained_model.load_pre_trained_llm
+        model_name: microsoft/Phi-3.5-mini-instruct
+        name: phi-3.5-mini-instruct
+        params-not-trainable: 0
+        params-total: 3821079552
+        params-trainable: 3821079552
+        tokenizer_name: microsoft/Phi-3.5-mini-instruct
+process_id:
+    value: 27061
+seed:
+    value: "6757628354856952594204297731752338002"
+skip_initial_eval:
+    value: false
+slurm_job_id:
+    value: "38643644"
+task:
+    value:
+        _recursive_: false
+        _target_: project.tasks.unlearning_atu.UnlearningATU
+        embedding_prediction_model:
+            _target_: project.embedding_prediction_model.EmbeddingPredictionTransformer.from_config
+            dropout: 0.1
+            hidden_dim: 768
+            name: transformer
+            num_heads: 8
+            num_layers: 6
+        first_stage_steps: 15000
+        name: unlearning-atu
+        num_other_targets: 3
+        stages:
+            - steps: 15000
+              type: training
+            - steps: 1000
+              threshold: 0.9
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.8
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.75
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.7
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.65
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.6
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.5
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.4
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.3
+              type: unlearning
+            - steps: 1000
+              type: training
+            - steps: 1000
+              threshold: 0.2
+              type: unlearning
+        text_encoder:
+            _target_: project.pre_trained_model.load_pre_trained_text_embedding_model
+            model_name: sentence-transformers/all-mpnet-base-v2
+            name: all-mpnet-base-v2
+            tokenizer_name: sentence-transformers/all-mpnet-base-v2
+        training_module:
+            clip_grad_norm: 1
+            pretrained_model_hook_layers:
+                - 4
+                - 15
+                - 29
+            training_lr: 0.0001
+            training_warmup_steps: 2000
+            training_weight_decay: 0
+            unlearning_lr: 0.0003
+            unlearning_weight_decay: 0
+        unlearning_data:
+            _target_: project.data.RWKUPositiveDataModule
+            batch_size: 16
+            context_window_length: 8
+            max_input_length: 256
+            name: rwku-positive
+            num_workers: 8
+text_encoder:
+    value:
+        params-not-trainable: 0
+        params-total: 109486464
+        params-trainable: 109486464
+trainer:
+    value:
+        accelerator: auto
+        devices: auto
+        log_every_n_steps: 10
+        max_epochs: -1
+unlearning_target:
+    value: 1_Stephen_King
+wandb:
+    value:
+        entity: savior
+        group: null
+        id: null
+        mode: null
+        name: atu-multi-4-15-29
+        project: align-then-unlearn

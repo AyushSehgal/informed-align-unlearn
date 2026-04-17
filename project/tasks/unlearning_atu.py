@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import lightning.pytorch as pl
 from transformers import AutoModelForCausalLM, AutoModel, AutoTokenizer
-from typing import Literal
+from typing import Literal, List, Union
 from project.utils.mean_pool import mean_pooling_reference_encoder
 from project.utils import get_logger, log_hyperparameters
 from lightning.pytorch.loggers import Logger
@@ -52,16 +52,30 @@ class UnlearningATU:
         log.info("Instantiating text encoder")
         text_encoder, text_encoder_tokenizer = instantiate(self.task_config.text_encoder)
 
-        log.info("Instantiating embedding prediction model")
+        # Resolve hook layers: support both single int (backward compat) and list
+        tm_config = self.task_config.training_module
+        if hasattr(tm_config, "pretrained_model_hook_layers") and tm_config.pretrained_model_hook_layers is not None:
+            hook_layers = list(tm_config.pretrained_model_hook_layers)
+        else:
+            hook_layers = [tm_config.pretrained_model_hook_layer]
+
+        log.info(f"Multi-layer ATU: hooking into layers {hook_layers}")
+
+        log.info("Instantiating embedding prediction models")
         log.info(
             f"Pre-trained model hidden size: {self.pre_trained_llm.config.hidden_size}"
         )
         log.info(f"Text encoder hidden size: {text_encoder.config.hidden_size}")
-        embedding_prediction_model = instantiate(
-            self.task_config.embedding_prediction_model,
-            input_dim=self.pre_trained_llm.config.hidden_size,
-            output_dim=text_encoder.config.hidden_size,
-        )
+
+        embedding_prediction_models = nn.ModuleDict()
+        for layer in hook_layers:
+            model = instantiate(
+                self.task_config.embedding_prediction_model,
+                input_dim=self.pre_trained_llm.config.hidden_size,
+                output_dim=text_encoder.config.hidden_size,
+            )
+            embedding_prediction_models[str(layer)] = model
+            log.info(f"  Created prediction model for layer {layer}")
 
         log_hyperparameters(
             self.logger,
@@ -69,7 +83,7 @@ class UnlearningATU:
             [
                 ("pre_trained_llm", self.pre_trained_llm),
                 ("text_encoder", text_encoder),
-                ("embedding_prediction_model", embedding_prediction_model),
+                ("embedding_prediction_models", embedding_prediction_models),
             ],
         )
         
@@ -100,13 +114,15 @@ class UnlearningATU:
 
         log.info("Instantiating UnlearningATU")
         task = UnlearningATUTrainingModule(
-            embedding_prediction_model=embedding_prediction_model,
+            embedding_prediction_models=embedding_prediction_models,
             pre_trained_llm=self.pre_trained_llm,
             pre_trained_llm_tokenizer=self.pre_trained_llm_tokenizer,
             text_encoder=text_encoder,
             text_encoder_tokenizer=text_encoder_tokenizer,
             unlearning_target=self.target_name,
-            **self.task_config.training_module,
+            pretrained_model_hook_layers=hook_layers,
+            **{k: v for k, v in self.task_config.training_module.items()
+               if k not in ("pretrained_model_hook_layer", "pretrained_model_hook_layers")},
         )
 
         log.info("Instantiating trainer")
@@ -139,9 +155,20 @@ class UnlearningATU:
             task.pre_trained_llm.load_state_dict(
                 torch.load(f"{stage1_ckpt}/pre_trained_llm.pt", map_location="cpu")
             )
-            task.embedding_prediction_model.load_state_dict(
-                torch.load(f"{stage1_ckpt}/embedding_prediction_model.pt", map_location="cpu")
-            )
+            # Load all prediction models
+            for layer_str, model in task.embedding_prediction_models.items():
+                ckpt_path = f"{stage1_ckpt}/embedding_prediction_model_layer{layer_str}.pt"
+                if os.path.exists(ckpt_path):
+                    model.load_state_dict(torch.load(ckpt_path, map_location="cpu"))
+                    log.info(f"  Loaded prediction model for layer {layer_str}")
+                else:
+                    # Backward compat: try loading old single-model checkpoint
+                    old_ckpt_path = f"{stage1_ckpt}/embedding_prediction_model.pt"
+                    if os.path.exists(old_ckpt_path) and len(task.embedding_prediction_models) == 1:
+                        model.load_state_dict(torch.load(old_ckpt_path, map_location="cpu"))
+                        log.info(f"  Loaded prediction model from legacy checkpoint for layer {layer_str}")
+                    else:
+                        log.warning(f"  No checkpoint found for layer {layer_str} at {ckpt_path}")
             self.task_config.stages = [s for s in self.task_config.stages if s["type"] != "training"]
             log.info("Stage 1 skipped, resuming from Stage 2")
 
@@ -165,10 +192,13 @@ class UnlearningATU:
             log.info(f"Stage {idx + 1} ({stage['type']}) completed!")
 
             run_name = self.global_config.wandb.get("name", "default")
-            save_dir = f"/content/drive/MyDrive/align-then-unlearn/checkpoints/{run_name}"
+            project_root = Path(__file__).parent.parent.parent
+            save_dir = str(project_root / "checkpoints" / run_name)
             os.makedirs(save_dir, exist_ok=True)
             torch.save(task.pre_trained_llm.state_dict(), f"{save_dir}/pre_trained_llm.pt")
-            torch.save(task.embedding_prediction_model.state_dict(), f"{save_dir}/embedding_prediction_model.pt")
+            # Save all prediction models
+            for layer_str, model in task.embedding_prediction_models.items():
+                torch.save(model.state_dict(), f"{save_dir}/embedding_prediction_model_layer{layer_str}.pt")
             log.info(f"Stage {idx + 1} weights saved to {save_dir}")
 
             if stage["type"] == "unlearning":
@@ -187,28 +217,29 @@ class UnlearningATU:
 class UnlearningATUTrainingModule(pl.LightningModule):
     def __init__(
         self,
-        embedding_prediction_model: nn.Module,
+        embedding_prediction_models: nn.ModuleDict,
         pre_trained_llm: AutoModelForCausalLM,
         pre_trained_llm_tokenizer: AutoTokenizer,
         text_encoder: AutoModel,
         text_encoder_tokenizer: AutoTokenizer,
         unlearning_target: str,
+        pretrained_model_hook_layers: List[int],
         training_warmup_steps: int,
         training_lr: float,
         training_weight_decay: float,
         unlearning_lr: float,
         unlearning_weight_decay: float,
-        pretrained_model_hook_layer: int,
         clip_grad_norm: float,
         stage: Literal["training", "unlearning"] = "training",
         **kwargs,
     ):
         super().__init__()
         self.save_hyperparameters(
-            ignore=("embedding_prediction_model", "pre_trained_llm", "text_encoder")
+            ignore=("embedding_prediction_models", "pre_trained_llm", "text_encoder")
         )
         self.unlearning_similarity_threshold = None
-        self.embedding_prediction_model = embedding_prediction_model
+        self.embedding_prediction_models = embedding_prediction_models
+        self.hook_layers = pretrained_model_hook_layers
         self.pre_trained_llm = pre_trained_llm
         self.pre_trained_llm_tokenizer = pre_trained_llm_tokenizer
         self.text_encoder = text_encoder
@@ -218,6 +249,7 @@ class UnlearningATUTrainingModule(pl.LightningModule):
         self.update_stage(stage)
         self.automatic_optimization = False
 
+        log.info(f"Multi-layer ATU: monitoring layers {self.hook_layers}")
         log.info(f"Unlearning target: {unlearning_target}, computing embedding...")
         unlearning_target_tokens = text_encoder_tokenizer.encode(
             unlearning_target, add_special_tokens=True
@@ -252,16 +284,18 @@ class UnlearningATUTrainingModule(pl.LightningModule):
         if self.stage == "training":
             self._disable_grad(self.text_encoder)
             self._disable_grad(self.pre_trained_llm)
-            self._enable_grad(self.embedding_prediction_model)
+            for model in self.embedding_prediction_models.values():
+                self._enable_grad(model)
+                model.train()
             self.pre_trained_llm.eval()
             self.text_encoder.eval()
-            self.embedding_prediction_model.train()
         elif self.stage == "unlearning":
             self._disable_grad(self.text_encoder)
-            self._enable_grad(self.embedding_prediction_model)
+            for model in self.embedding_prediction_models.values():
+                self._disable_grad(model)
+                model.eval()
             self._enable_grad(self.pre_trained_llm)
             self.pre_trained_llm.train()
-            self.embedding_prediction_model.eval()
             self.text_encoder.eval()
 
     def train(self, mode=True):
@@ -272,7 +306,8 @@ class UnlearningATUTrainingModule(pl.LightningModule):
                 self.pre_trained_llm.eval()
             elif self.stage == "unlearning":
                 self.text_encoder.eval()
-                self.embedding_prediction_model.eval()
+                for model in self.embedding_prediction_models.values():
+                    model.eval()
         else:
             super().train(False)
         return self
@@ -307,67 +342,81 @@ class UnlearningATUTrainingModule(pl.LightningModule):
                     reference_outputs, attention_mask_enc
                 ).view(batch_size, seq_len, -1)
 
-            # Forward pass through the pretrained model
+            # Forward pass through the pretrained model (one shared forward pass)
             with torch.no_grad():
                 pretrained_outputs = self.pre_trained_llm(
                     input_ids=input_ids,
                     output_hidden_states=True,
                     attention_mask=attention_mask,
                 )
-                hidden_states = pretrained_outputs.hidden_states[
-                    self.hparams.pretrained_model_hook_layer
-                ]
 
-            # Forward pass through embedding prediction model
-            outputs = self.embedding_prediction_model(hidden_states)
-            loss = -torch.nn.functional.cosine_similarity(
-                outputs, target_embeddings, dim=-1
-            ) # shape (batch_size, max_length)
-            loss = loss * has_full_window
-            loss = loss.sum() / (has_full_window.sum() + 1e-8)
+            # Train each prediction module on its layer's hidden states
+            total_loss = 0.0
+            for layer_idx_str, pred_model in self.embedding_prediction_models.items():
+                layer_idx = int(layer_idx_str)
+                hidden_states = pretrained_outputs.hidden_states[layer_idx]
+                outputs = pred_model(hidden_states)
+                layer_loss = -torch.nn.functional.cosine_similarity(
+                    outputs, target_embeddings, dim=-1
+                )  # shape (batch_size, max_length)
+                layer_loss = layer_loss * has_full_window
+                layer_loss = layer_loss.sum() / (has_full_window.sum() + 1e-8)
+                total_loss = total_loss + layer_loss
+
+                self.log(f"train/training_loss_layer{layer_idx}", layer_loss, batch_size=batch_size)
+
+            loss = total_loss / len(self.embedding_prediction_models)
             assert not torch.isnan(loss), "Loss is NaN"
 
             opt_list[0].zero_grad()
             self.manual_backward(loss)
             grad_norm = torch.nn.utils.clip_grad_norm_(
-                self.embedding_prediction_model.parameters(),
+                self.embedding_prediction_models.parameters(),
                 max_norm=self.hparams.clip_grad_norm,
             )
             self.log("train/grad_norm_embedding_clip", grad_norm, batch_size=batch_size)
             opt_list[0].step()
 
             if batch_idx == 0:
-                assert not torch.all(outputs == 0), "Outputs are all zero"
+                # Sanity checks on the last layer's outputs
+                last_layer_str = str(self.hook_layers[-1])
+                last_hidden = pretrained_outputs.hidden_states[self.hook_layers[-1]]
+                last_outputs = self.embedding_prediction_models[last_layer_str](last_hidden)
+                assert not torch.all(last_outputs == 0), "Outputs are all zero"
                 assert not torch.all(target_embeddings == 0), (
                     "Target embeddings are all zero"
                 )
 
         elif self.stage == "unlearning":
-            # Forward pass through the pretrained model
+            # Forward pass through the pretrained model (trainable)
             pretrained_outputs = self.pre_trained_llm(
                 input_ids=input_ids, output_hidden_states=True, attention_mask=attention_mask
             )
-            hidden_states = pretrained_outputs.hidden_states[
-                self.hparams.pretrained_model_hook_layer
-            ]
 
-            # Forward pass through embedding prediction model
-            outputs = self.embedding_prediction_model(
-                hidden_states
-            )  # shape (batch_size, seq_len, emb_dim)
-
-            # Minimize cosine similarity between outputs and unlearning target if it exceeds the threshold
+            # Compute unlearning loss at each monitored layer
             assert self.unlearning_similarity_threshold is not None, (
                 "Unlearning similarity threshold must be set before unlearning stage"
             )
-            loss = torch.nn.functional.relu(
-                torch.nn.functional.cosine_similarity(
-                    outputs,
-                    self.unlearning_target_embedding.unsqueeze(0).unsqueeze(0),
-                    dim=-1,
-                )
-                - self.unlearning_similarity_threshold
-            ).mean()
+
+            total_loss = 0.0
+            for layer_idx_str, pred_model in self.embedding_prediction_models.items():
+                layer_idx = int(layer_idx_str)
+                hidden_states = pretrained_outputs.hidden_states[layer_idx]
+                outputs = pred_model(hidden_states)  # shape (batch_size, seq_len, emb_dim)
+
+                layer_loss = torch.nn.functional.relu(
+                    torch.nn.functional.cosine_similarity(
+                        outputs,
+                        self.unlearning_target_embedding.unsqueeze(0).unsqueeze(0),
+                        dim=-1,
+                    )
+                    - self.unlearning_similarity_threshold
+                ).mean()
+                total_loss = total_loss + layer_loss
+
+                self.log(f"train/unlearning_loss_layer{layer_idx}", layer_loss, batch_size=batch_size)
+
+            loss = total_loss / len(self.embedding_prediction_models)
             assert not torch.isnan(loss), "Loss is NaN"
 
             opt_list[1].zero_grad()
@@ -390,11 +439,13 @@ class UnlearningATUTrainingModule(pl.LightningModule):
 
     def configure_optimizers(self):
         return [
+            # Optimizer 0: all prediction modules (used during training stage)
             torch.optim.Adam(
-                self.embedding_prediction_model.parameters(),
+                self.embedding_prediction_models.parameters(),
                 lr=self.hparams.training_lr,
                 weight_decay=self.hparams.training_weight_decay,
             ),
+            # Optimizer 1: LLM (used during unlearning stage)
             torch.optim.SGD(
                 self.pre_trained_llm.parameters(),
                 lr=self.hparams.unlearning_lr,

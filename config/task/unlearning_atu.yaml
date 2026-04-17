@@ -14,7 +14,10 @@ training_module:
   training_weight_decay: 0.0
   unlearning_lr: 0.0003
   unlearning_weight_decay: 0.0
-  pretrained_model_hook_layer: 29
+  pretrained_model_hook_layers:
+    - 4
+    - 15
+    - 29
   clip_grad_norm: 1.0
 
 num_other_targets: 3

@@ -36,16 +36,16 @@ def manual_seed(seed: Optional[int]):
     rng = np.random.default_rng(np_ss)
 
     # We seed the global RNG anyway in case some library uses it internally
-    np.random.seed(int(npg_ss.generate_state(1, np.uint32)))
+    np.random.seed(int(npg_ss.generate_state(1, np.uint32)[0]))
 
     # Always initialize the global default (CPU) generator
-    torch.random.default_generator.manual_seed(int(pt_ss.generate_state(1, np.uint64)))
+    torch.random.default_generator.manual_seed(int(pt_ss.generate_state(1, np.uint64)[0]))
 
     if torch.cuda.is_available():
 
         def lazy_seed_cuda():
             for i in range(torch.cuda.device_count()):
-                device_seed = int(cuda_ss[i].generate_state(1, np.uint64))
+                device_seed = int(cuda_ss[i].generate_state(1, np.uint64)[0])
                 torch.cuda.default_generators[i].manual_seed(device_seed)
 
         torch.cuda._lazy_call(lazy_seed_cuda)
