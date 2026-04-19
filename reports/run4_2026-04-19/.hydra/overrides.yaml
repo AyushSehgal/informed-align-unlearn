@@ -1,0 +1,12 @@
+- task=unlearning_atu_fast
+- unlearning_target=1_Stephen_King
+- skip_initial_eval=true
+- task.training_module.pretrained_model_hook_layer=4
+- task.training_module.kl_retain_weight=0.0
+- task.training_module.disable_grad_checkpointing_on_unlearn=true
+- task.subject_mask_window=1
+- task.unlearning_data.batch_size=32
+- task.unlearning_data.max_input_length=128
+- task.unlearning_data.num_workers=8
+- trainer.devices=1
+- +trainer.precision=bf16-mixed

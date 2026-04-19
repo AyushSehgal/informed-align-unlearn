@@ -1,0 +1,79 @@
+task:
+  text_encoder:
+    _target_: project.pre_trained_model.load_pre_trained_text_embedding_model
+    name: all-mpnet-base-v2
+    model_name: sentence-transformers/all-mpnet-base-v2
+    tokenizer_name: sentence-transformers/all-mpnet-base-v2
+  embedding_prediction_model:
+    _target_: project.embedding_prediction_model.EmbeddingPredictionTransformer.from_config
+    name: transformer
+    hidden_dim: 768
+    num_heads: 8
+    num_layers: 6
+    dropout: 0.1
+  unlearning_data:
+    _target_: project.data.RWKUPositiveDataModule
+    name: rwku-positive
+    batch_size: 32
+    num_workers: 8
+    max_input_length: 128
+    context_window_length: 8
+  _target_: project.tasks.unlearning_atu.UnlearningATU
+  _recursive_: false
+  name: unlearning-atu
+  training_module:
+    training_warmup_steps: 2000
+    training_lr: 0.0001
+    training_weight_decay: 0.0
+    unlearning_lr: 0.0003
+    unlearning_weight_decay: 0.0
+    pretrained_model_hook_layer: 4
+    clip_grad_norm: 1.0
+    require_subject_mask: true
+    kl_retain_weight: 0.0
+    disable_grad_checkpointing_on_unlearn: true
+  subject_mask_window: 1
+  num_other_targets: 3
+  first_stage_steps: 300
+  stages:
+  - type: training
+    steps: ${task.first_stage_steps}
+  - type: unlearning
+    threshold: 0.4
+    steps: 500
+  - type: training
+    steps: 200
+  - type: unlearning
+    threshold: 0.25
+    steps: 500
+unlearning_target: 1_Stephen_King
+unlearning_chain: null
+skip_initial_eval: true
+seed: null
+name: unlearning-${unlearning_target}
+exp: atu-unlearning
+wandb:
+  id: null
+  entity: null
+  project: informed-align-unlearn
+  group: null
+  name: atu-layer${task.training_module.pretrained_model_hook_layer}-${unlearning_target}-${pre_trained_llm.name}
+  mode: null
+trainer:
+  accelerator: auto
+  devices: 1
+  max_epochs: -1
+  log_every_n_steps: 10
+  precision: bf16-mixed
+early_stopping: null
+matmul_precision: medium
+pre_trained_llm:
+  _target_: project.pre_trained_model.load_pre_trained_llm
+  name: qwen3.5-4b
+  model_name: Qwen/Qwen3.5-4B
+  tokenizer_name: Qwen/Qwen3.5-4B
+  torch_dtype: bfloat16
+  trust_remote_code: true
+  device_map: auto
+  attn_implementation: eager
+  tokenizer_variant: qwen

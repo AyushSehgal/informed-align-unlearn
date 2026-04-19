@@ -16,6 +16,20 @@ training_module:
   unlearning_weight_decay: 0.0
   pretrained_model_hook_layer: 29
   clip_grad_norm: 1.0
+  # Masked unlearning: only apply the ReLU-cosine loss on subject tokens.
+  # require_subject_mask=True refuses to silently fall back to full-sequence
+  # when the mask is empty for a sample — safer default.
+  require_subject_mask: true
+  # KL-retain anchors non-subject positions to a frozen snapshot of the
+  # pre-unlearn model. Opt-in; set to e.g. 0.1 to enable.
+  kl_retain_weight: 0.0
+  # H200 has plenty of VRAM; disabling grad checkpointing on the unlearn
+  # stage speeds backward ~2x. Turned off only during unlearning.
+  disable_grad_checkpointing_on_unlearn: true
+
+# Data-side knob: dilate each subject match by N tokens on either side to
+# catch attention-smeared neighbours. 0 = exact subject tokens only.
+subject_mask_window: 0
 
 num_other_targets: 3
 

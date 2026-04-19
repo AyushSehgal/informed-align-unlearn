@@ -8,7 +8,8 @@ import torch
 import torch.nn as nn
 import lightning.pytorch as pl
 from transformers import AutoModelForCausalLM, AutoModel, AutoTokenizer
-from typing import Literal
+from typing import Literal, Optional
+import copy
 from project.utils.mean_pool import mean_pooling_reference_encoder
 from project.utils import get_logger, log_hyperparameters
 from lightning.pytorch.loggers import Logger
@@ -96,12 +97,26 @@ class UnlearningATU:
             self.pre_trained_llm.config, "tokenizer_variant", "phi"
         )
 
+        # Map target_id -> display name so the subject-mask regex can localise
+        # the target in each sample's raw text. Training uses multiple targets
+        # (self + distractors); unlearning uses only self.
+        def _name_for(tid: str) -> str:
+            return tid.split("_", 1)[1].replace("_", " ") if "_" in tid else tid
+
+        training_target_names = {
+            tid: _name_for(tid) for tid in [self.target_id] + other_target_ids
+        }
+        training_target_names[self.target_id] = self.target_name
+
+        subject_mask_window = int(self.task_config.get("subject_mask_window", 0))
         training_datamodule = instantiate(
             self.task_config.unlearning_data,
             primary_tokenizer=self.pre_trained_llm_tokenizer,
             secondary_tokenizer=text_encoder_tokenizer,
             target_ids=[self.target_id] + other_target_ids,
             tokenizer_variant=tokenizer_variant,
+            target_names=training_target_names,
+            subject_mask_window=subject_mask_window,
         )
         training_datamodule.prepare_data()
         training_datamodule.setup("train")
@@ -113,6 +128,8 @@ class UnlearningATU:
             secondary_tokenizer=text_encoder_tokenizer,
             target_ids=[self.target_id],
             tokenizer_variant=tokenizer_variant,
+            target_names={self.target_id: self.target_name},
+            subject_mask_window=subject_mask_window,
         )
         unlearning_datamodule.prepare_data()
         unlearning_datamodule.setup("train")
@@ -240,6 +257,9 @@ class UnlearningATUTrainingModule(pl.LightningModule):
         save_dir: str = None,
         checkpoint_interval: int = None,
         stage: Literal["training", "unlearning"] = "training",
+        require_subject_mask: bool = True,
+        kl_retain_weight: float = 0.0,
+        disable_grad_checkpointing_on_unlearn: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -256,6 +276,15 @@ class UnlearningATUTrainingModule(pl.LightningModule):
         self.text_encoder_tokenizer = text_encoder_tokenizer
         self.unlearning_target = unlearning_target
         self.stage = stage
+        self.require_subject_mask = require_subject_mask
+        self.kl_retain_weight = float(kl_retain_weight)
+        self.disable_grad_checkpointing_on_unlearn = disable_grad_checkpointing_on_unlearn
+        # Snapshot of the student weights at the moment we entered unlearning,
+        # used as the KL-retain teacher on non-subject positions. Built lazily
+        # on the first unlearning step (lives on the same device as the student,
+        # in bf16 to halve VRAM — on H200 this is cheap).
+        self._kl_ref_model: Optional[nn.Module] = None
+        self._empty_mask_skip_count = 0
         self.update_stage(stage)
         self.automatic_optimization = False
 
@@ -345,6 +374,12 @@ class UnlearningATUTrainingModule(pl.LightningModule):
             self.pre_trained_llm.eval()
             self.text_encoder.eval()
             self.embedding_prediction_model.train()
+            # Re-enable grad checkpointing in case we turned it off for unlearn.
+            if hasattr(self.pre_trained_llm, "gradient_checkpointing_enable"):
+                try:
+                    self.pre_trained_llm.gradient_checkpointing_enable()
+                except Exception:
+                    pass
         elif self.stage == "unlearning":
             self._disable_grad(self.text_encoder)
             self._enable_grad(self.embedding_prediction_model)
@@ -354,6 +389,49 @@ class UnlearningATUTrainingModule(pl.LightningModule):
             self.pre_trained_llm.train()
             self.embedding_prediction_model.eval()
             self.text_encoder.eval()
+            if self.disable_grad_checkpointing_on_unlearn and hasattr(
+                self.pre_trained_llm, "gradient_checkpointing_disable"
+            ):
+                log.info("Disabling gradient checkpointing for unlearn stage (H200 VRAM)")
+                try:
+                    self.pre_trained_llm.gradient_checkpointing_disable()
+                except Exception as e:
+                    log.warning(f"Could not disable gradient checkpointing: {e}")
+            # Snapshot KL-retain teacher now so non-subject positions are anchored
+            # to the pre-unlearn student, not the original pretrained weights —
+            # preserves the alignment progress from stage 1.
+            if self.kl_retain_weight > 0 and self._kl_ref_model is None:
+                log.info(
+                    f"Snapshotting KL-retain reference (weight={self.kl_retain_weight})"
+                )
+                # deepcopy on a device_map="auto" / accelerate-hooked model can
+                # be fragile; go through a CPU state_dict round-trip to avoid
+                # copying accelerate hooks and to cap peak VRAM at snapshot.
+                try:
+                    ref_state = {
+                        k: v.detach().cpu().clone()
+                        for k, v in self.pre_trained_llm.state_dict().items()
+                    }
+                    ref = copy.deepcopy(self.pre_trained_llm).to("cpu")
+                    ref.load_state_dict(ref_state)
+                    ref = ref.to(self.pre_trained_llm.device)
+                except Exception as e:
+                    log.warning(
+                        f"CPU-roundtrip ref snapshot failed ({e}); "
+                        f"falling back to in-place deepcopy."
+                    )
+                    ref = copy.deepcopy(self.pre_trained_llm)
+                for p in ref.parameters():
+                    p.requires_grad = False
+                ref.eval()
+                if hasattr(ref, "gradient_checkpointing_disable"):
+                    try:
+                        ref.gradient_checkpointing_disable()
+                    except Exception:
+                        pass
+                self._kl_ref_model = ref
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
 
     def train(self, mode=True):
         if mode:
@@ -441,13 +519,21 @@ class UnlearningATUTrainingModule(pl.LightningModule):
                 )
 
         elif self.stage == "unlearning":
-            # Forward pass through the pretrained model
+            # Single student forward: we need hidden_states at the hook layer
+            # for the forget loss, and (when KL-retain is on) logits for the
+            # retain KL. Doing both in one forward halves student activation
+            # memory vs. two separate forwards.
             pretrained_outputs = self.pre_trained_llm(
-                input_ids=input_ids, output_hidden_states=True, attention_mask=attention_mask
+                input_ids=input_ids,
+                output_hidden_states=True,
+                attention_mask=attention_mask,
             )
             hidden_states = pretrained_outputs.hidden_states[
                 self.hparams.pretrained_model_hook_layer
             ]
+            student_logits = (
+                pretrained_outputs.logits if self.kl_retain_weight > 0 else None
+            )
 
             # Cast to the embedding prediction model's dtype (see training
             # stage above). Keep grad flow back into the LLM — `.to()`
@@ -461,27 +547,113 @@ class UnlearningATUTrainingModule(pl.LightningModule):
                 hidden_states
             )  # shape (batch_size, seq_len, emb_dim)
 
-            # Minimize cosine similarity between outputs and unlearning target if it exceeds the threshold
             assert self.unlearning_similarity_threshold is not None, (
                 "Unlearning similarity threshold must be set before unlearning stage"
             )
-            loss = torch.nn.functional.relu(
-                torch.nn.functional.cosine_similarity(
-                    outputs,
-                    self.unlearning_target_embedding.unsqueeze(0).unsqueeze(0),
-                    dim=-1,
-                )
-                - self.unlearning_similarity_threshold
-            ).mean()
-            assert not torch.isnan(loss), "Loss is NaN"
 
-            opt_list[1].zero_grad()
-            self.manual_backward(loss)
-            grad_norm = torch.nn.utils.clip_grad_norm_(
-                self.pre_trained_llm.parameters(), max_norm=self.hparams.clip_grad_norm
+            # fp32 cosine + hinge: bf16 cos-sim has ~1e-2 error, which swallows
+            # the signal around the typical 0.2-0.3 threshold.
+            cos = torch.nn.functional.cosine_similarity(
+                outputs.float(),
+                self.unlearning_target_embedding.unsqueeze(0).unsqueeze(0).float(),
+                dim=-1,
+            )  # (B, T)
+            per_pos_loss = torch.nn.functional.relu(
+                cos - self.unlearning_similarity_threshold
             )
-            self.log("train/grad_norm_pre_clip", grad_norm, batch_size=batch_size)
-            opt_list[1].step()
+
+            # Masked mean over (subject_mask AND attention_mask). Falls back to
+            # the full sequence only when require_subject_mask is False.
+            subject_mask = batch.get("subject_mask")
+            if subject_mask is None and self.require_subject_mask:
+                raise RuntimeError(
+                    "require_subject_mask=True but batch has no 'subject_mask'. "
+                    "Check the datamodule wired target_name through."
+                )
+            if subject_mask is None:
+                mask = attention_mask.to(per_pos_loss.dtype)
+            else:
+                mask = (subject_mask * attention_mask).to(per_pos_loss.dtype)
+
+            local_num = (per_pos_loss * mask).sum()
+            local_den = mask.sum()
+
+            # Log coverage stats (per-batch sanity — if mostly zero we have a
+            # no-op loss, per the expert's mandatory sanity check).
+            has_any = (subject_mask.sum(dim=1) > 0).float() if subject_mask is not None else torch.ones(batch_size, device=per_pos_loss.device)
+            self.log("train/subject_mask_coverage_frac", has_any.mean(), batch_size=batch_size)
+            self.log("train/subject_mask_tokens_per_seq", (mask.sum(dim=1).mean() if mask.dim() == 2 else local_den / max(1, batch_size)), batch_size=batch_size)
+
+            # DDP-correct reduction: with world_size W ranks, DDP averages each
+            # parameter's gradient by 1/W. For the true global mean we want
+            #   grad[W avg of local_num / global_den]  ==  grad[(sum local_num) / global_den].
+            # So each rank divides its local_num by (global_den / W).
+            # Rank-sync global_den via all_reduce so the skip decision is
+            # identical on every rank (otherwise DDP deadlocks at backward).
+            world_size = self.trainer.world_size if self.trainer is not None else 1
+            if world_size > 1:
+                from torch import distributed as dist
+                global_den_t = local_den.detach().clone()
+                dist.all_reduce(global_den_t, op=dist.ReduceOp.SUM)
+                global_den = global_den_t.item()
+            else:
+                global_den = local_den.item()
+
+            skip_unlearn = global_den <= 0
+            if skip_unlearn:
+                self._empty_mask_skip_count += 1
+                self.log("train/unlearn_skipped_empty_mask", 1.0, batch_size=batch_size)
+                forget_loss = None
+            else:
+                # Per-rank scaling that yields the true global mean after
+                # DDP's 1/W gradient averaging.
+                forget_loss = local_num * world_size / global_den
+
+            # Allow a KL-retain-only step if the forget signal is empty:
+            # even with no subject tokens, anchoring non-subject positions
+            # to the pre-unlearn ref is a valid update.
+            total_loss = forget_loss if forget_loss is not None else None
+
+            # KL retain on non-subject, non-pad positions keeps the rest of the
+            # distribution anchored to the pre-unlearn reference, preserving
+            # MMLU and other capabilities. Opt-in via kl_retain_weight > 0.
+            if self.kl_retain_weight > 0 and self._kl_ref_model is not None:
+                retain_mask = attention_mask
+                if subject_mask is not None:
+                    retain_mask = retain_mask * (1 - subject_mask)
+                retain_mask = retain_mask.to(per_pos_loss.dtype)
+                retain_den = retain_mask.sum().clamp(min=1.0)
+
+                with torch.no_grad():
+                    ref_logits = self._kl_ref_model(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                    ).logits
+                # student_logits was produced by the single forward above.
+                # Forward KL(ref || student) on retained positions, fp32 for stability.
+                logp_student = torch.nn.functional.log_softmax(student_logits.float(), dim=-1)
+                p_ref = torch.nn.functional.softmax(ref_logits.float(), dim=-1)
+                per_pos_kl = (p_ref * (p_ref.clamp_min(1e-12).log() - logp_student)).sum(-1)
+                kl_loss = (per_pos_kl * retain_mask).sum() / retain_den
+                weighted_kl = self.kl_retain_weight * kl_loss
+                total_loss = weighted_kl if total_loss is None else total_loss + weighted_kl
+                self.log("train/kl_retain", kl_loss, batch_size=batch_size)
+
+            if total_loss is None:
+                # Every rank arrived at skip_unlearn=True via the same
+                # all-reduced global_den, so this is DDP-safe.
+                loss = torch.zeros((), device=input_ids.device)
+            else:
+                assert not torch.isnan(total_loss), "Loss is NaN"
+                opt_list[1].zero_grad()
+                self.manual_backward(total_loss)
+                grad_norm = torch.nn.utils.clip_grad_norm_(
+                    self.pre_trained_llm.parameters(),
+                    max_norm=self.hparams.clip_grad_norm,
+                )
+                self.log("train/grad_norm_pre_clip", grad_norm, batch_size=batch_size)
+                opt_list[1].step()
+                loss = total_loss
         else:
             raise ValueError(f"Invalid stage: {self.stage}")
 
