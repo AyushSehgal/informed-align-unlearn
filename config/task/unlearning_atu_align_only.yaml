@@ -1,0 +1,10 @@
+defaults:
+  - unlearning_atu
+
+# Alignment-only config used as the first step of the mask-width sweep.
+# The stage1 checkpoint it saves is then shared across all sweep points so
+# we only pay the ~5min alignment cost once.
+first_stage_steps: 300
+stages:
+  - type: "training"
+    steps: ${task.first_stage_steps}

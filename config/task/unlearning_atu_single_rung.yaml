@@ -1,0 +1,11 @@
+defaults:
+  - unlearning_atu
+
+# Single-rung unlearn for the mask-width sweep. Paired with
+# stage1_checkpoint pointing at an already-aligned snapshot so the training
+# stage is skipped (see project/tasks/unlearning_atu.py::unlearn). One rung
+# at a middling threshold keeps each sweep point short (~15 min incl. eval).
+stages:
+  - type: "unlearning"
+    threshold: 0.3
+    steps: 500

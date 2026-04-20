@@ -1,0 +1,28 @@
+# @package _global_
+
+# Multi-turn unlearning at multiple layers for the SAME target.
+# After forgetting at layer 4, we re-align + unlearn at layer 16 on the
+# already-modified model, chasing any residual fact representations that
+# layer-4 editing missed. `unlearning_chain` is handled by train.py —
+# each step runs its own align + unlearn, with the model state carried
+# between steps. Pre-chain and post-chain evals happen once; intermediate
+# evals are suppressed.
+#
+# Usage:
+#   python launch_training.py experiment=multi_turn_layers task=unlearning_atu_fast
+#
+# The `unlearning_target` field is ignored when `unlearning_chain` is set.
+
+unlearning_target: ~
+
+unlearning_chain:
+  - target: "1_Stephen_King"
+    layer: 4
+  - target: "1_Stephen_King"
+    layer: 16
+  # Add more steps here, e.g.:
+  # - target: "1_Stephen_King"
+  #   layer: 28
+  # or chain a second target:
+  # - target: "2_Confucius"
+  #   layer: 4
