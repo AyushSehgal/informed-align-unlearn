@@ -16,6 +16,7 @@
 TASK=""
 EXPERIMENT=""
 EXTRA_OVERRIDES=""
+LOCAL=0
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -31,9 +32,13 @@ while [[ $# -gt 0 ]]; do
             EXTRA_OVERRIDES="$2"
             shift 2
             ;;
+        --local)
+            LOCAL=1
+            shift 1
+            ;;
         *)
             echo "Unknown argument: $1"
-            echo "Usage: bash run_unlearn.sh [--task TASK] [--experiment EXPERIMENT] [--overrides \"key=val ...\"]"
+            echo "Usage: bash run_training.sh [--task TASK] [--experiment EXPERIMENT] [--overrides \"key=val ...\"] [--local]"
             exit 1
             ;;
     esac
@@ -43,7 +48,7 @@ done
 # CONFIGURATION
 # ============================================================================
 
-PROJECT_DIR="/data/user_data/ayushseh/informed-align-unlearn"
+PROJECT_DIR="${PROJECT_DIR:-$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel 2>/dev/null || pwd)}"
 LOG_DIR="${PROJECT_DIR}/logs/unlearn"
 
 # Build a descriptive job suffix
@@ -91,8 +96,19 @@ echo "Hydra command: ${HYDRA_CMD}"
 echo ""
 
 # ============================================================================
-# SUBMIT JOB
+# RUN LOCAL OR SUBMIT SLURM
 # ============================================================================
+
+if [ "${LOCAL}" = "1" ] || ! command -v sbatch > /dev/null 2>&1; then
+    echo "Running locally (no sbatch)"
+    cd "${PROJECT_DIR}"
+    if [ -n "${VENV_ACTIVATE:-}" ] && [ -f "${VENV_ACTIVATE}" ]; then
+        # shellcheck disable=SC1090
+        source "${VENV_ACTIVATE}"
+    fi
+    eval "${HYDRA_CMD}"
+    exit $?
+fi
 
 JOB_ID=$(sbatch <<EOF
 #!/bin/bash
@@ -111,12 +127,12 @@ echo "Start time: \$(date)"
 echo "GPU: \$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo 'N/A')"
 echo ""
 
-export HF_HOME=/data/user_data/ayushseh/.hf_cache
-export HF_HUB_CACHE=/data/hf_cache/hub
-export HF_DATASETS_CACHE=/data/hf_cache/datasets
+export HF_HOME=${HF_HOME:-\$HOME/.cache/huggingface}
 
 cd ${PROJECT_DIR}
-source venv/bin/activate
+if [ -n "${VENV_ACTIVATE:-}" ] && [ -f "${VENV_ACTIVATE}" ]; then
+    source "${VENV_ACTIVATE}"
+fi
 
 echo "Running: ${HYDRA_CMD}"
 echo ""

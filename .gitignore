@@ -1,16 +1,28 @@
-
 # Python
 __pycache__/
 *.pyc
+*.egg-info/
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
 
 # Colab
 *.ipynb_checkpoints
 
-# Logs
+# Logs / outputs
 *.log
-
-# Data
-data/
+logs/
 outputs/
+wandb/
 checkpoints/
 
+# Downloaded datasets (see data/rwku/download_rwku_data.sh)
+data/rwku/*/
+!data/rwku/download_rwku_data.sh
+!data/rwku/retokenize_positive.py

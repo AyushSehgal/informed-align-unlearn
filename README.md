@@ -1,84 +1,146 @@
-# Informed Align then Unlearn
+# Informed Align-then-Unlearn
 
-IDL Project Spring 2026 
+IDL Project, Spring 2026. Forked from [ExplainableML/align-then-unlearn](https://github.com/ExplainableML/align-then-unlearn) (Spohn et al., _ICML 2025 MUGen_, [arXiv:2506.13181](https://arxiv.org/abs/2506.13181)).
 
-Forked from https://github.com/ExplainableML/align-then-unlearn
+We extend Align-then-Unlearn with **layer-informed** unlearning: causal tracing picks the hook layer, masked losses restrict the unlearn signal to subject tokens, and a chained mode lets us forget multiple targets back-to-back.
 
-Use transformers==4.51.3 for running code
-    
-# Align-then-Unlearn: Embedding Alignment for LLM Unlearning <br/> _ICML 2025 Workshop MUGen_
-[![Paper](http://img.shields.io/badge/paper-arxiv.2506.13181-B31B1B.svg)](https://arxiv.org/abs/2506.13181)
-[![Paper](https://img.shields.io/badge/paper-OpenReview-8C1B13.svg)](https://openreview.net/forum?id=pyhbguXKXQ)
+---
 
-Philipp Spohn <sup>1</sup> &#8198; Leander Girrbach<sup>1,2</sup> &#8198; Jessica Bader<sup>1,2</sup> &#8198; Zeynep Akata<sup>1,2</sup>
-
-<sup>1</sup>Technical University of Munich &#8198; <sup>2</sup> MCML, MDSI, Helmholtz Munich
-</div>
-
-**Paper:** [arxiv.org/abs/2506.13181](https://arxiv.org/abs/2506.13181)
-
-**Abstract:**
-As large language models (LLMs) are trained on massive datasets, they have raised significant privacy and ethical concerns due to their potential to inadvertently retain sensitive information. Unlearning seeks to selectively remove specific data from trained models, such as personal information or copyrighted content. Current approaches targeting specific output sequences at the token level often fail to achieve complete forgetting and remain susceptible to prompt rephrasing. We propose Align-then-Unlearn, a novel framework that performs unlearning in the semantic embedding space rather than directly on output tokens. Alignthen-Unlearn first augments the LLM with an embedding prediction module trained to anticipate future context representations. Unlearning is then achieved by fine-tuning the model to minimize the similarity between these predicted embeddings and a target embedding that represents the concept to be removed. Initial results show that Alignthen-Unlearn effectively removes targeted knowledge with minimal degradation in overall model utility. These findings suggest that embedding-based unlearning offers a promising and robust approach to removing conceptual knowledge.
-
-## Setup
-- Install the project with `pip install -e .`
-- Run the `data/rwku/download_rwku_data.sh` script to download the necessary datasets.
-- Adapt the config files to your setup (change the wandb entity in `config/train.yaml`, adapt the launcher configs in `config/hydra/launcher`)
-
-## How to use it
+## Quickstart
 
 ```bash
-# Basic training
-python launch_training.py
+# 1. Clone + install (editable, pulls torch/lightning/transformers)
+git clone <this-repo> informed-align-unlearn
+cd informed-align-unlearn
+pip install -e .
 
-# Launch SLURM job
-python launch_training.py -m hydra/launcher=lrz-a100
+# 2. Download the RWKU benchmark data
+bash data/rwku/download_rwku_data.sh
 
-# Launch multiple SLURM jobs for all targets in celebs-1 config
-python launch_training.py -m hydra/launcher=lrz-a100 experiment=celebs-1
+# 3. (Optional) Set your wandb entity in config/train.yaml, or just
+#    export WANDB_MODE=offline to log locally.
 
-# Use GA / NPO for unlearning (WIP, NOT WELL TESTED YET!)
-python launch_training.py task=unlearning_ga
-python launch_training.py task=unlearning_npo
+# 4. Run it — one script, one flag.
+bash run.sh --local                               # default ATU run
 ```
 
-## Acknowledgements
-- Based on template by Marten Lienen (https://github.com/martenlienen)
-- Some of the code adopted from the RWKU benchmark (https://github.com/jinzhuoran/RWKU)
+That's it. `run.sh` dispatches to every experiment mode in the repo.
+
+---
+
+## The one script: `run.sh`
+
+```
+bash run.sh --mode {train|chain|sweep|trace} [flags...]
+```
+
+| Flag | Applies to | Meaning |
+|---|---|---|
+| `--mode` | all | `train` (default), `chain`, `sweep`, `trace` |
+| `--target ID` | train/chain/sweep/trace | RWKU target, e.g. `1_Stephen_King` |
+| `--layer N` | train/sweep | transformer hook layer (default 4) |
+| `--task CFG` | train/chain | `unlearning_atu` (default), `unlearning_atu_align_only`, `unlearning_atu_single_rung`, `unlearning_ga`, `unlearning_npo` |
+| `--experiment EXP` | train | Hydra experiment preset (`celebs-1`, `multi_turn_layers`, …) |
+| `--model HF_ID` | trace | e.g. `Qwen/Qwen3.5-4B`, `microsoft/Phi-3.5-mini-instruct` |
+| `--chain "t:L,t:L"` | chain | comma-separated `target:layer` pairs |
+| `--widths "2 5 10"` | sweep | subject-mask window values to sweep |
+| `--overrides "k=v k=v"` | train/chain | extra Hydra overrides |
+| `--local` | all | run inline; skip SLURM `sbatch` |
+
+Env overrides: `PROJECT_DIR`, `HF_HOME`, `VENV_ACTIVATE`, `BASE_DIR` (sweep output dir).
+
+### Examples
+
+```bash
+# Default ATU run (Stephen King, layer 4), inline:
+bash run.sh --local
+
+# GA baseline on celebs-1, via SLURM:
+bash run.sh --task unlearning_ga --experiment celebs-1
+
+# Try layer 20 instead of the default 4:
+bash run.sh --layer 20 --local
+
+# Chained unlearning — forget three targets in sequence:
+bash run.sh --mode chain \
+    --chain "1_Stephen_King:4,2_Confucius:20,3_Elon_Musk:10" --local
+
+# Mask-width sweep (reuses one alignment across widths):
+bash run.sh --mode sweep --target 1_Stephen_King --layer 4 --widths "2 5 10"
+
+# Causal trace (which layers store Stephen King's facts?):
+bash run.sh --mode trace --target 1_Stephen_King --model Qwen/Qwen3.5-4B --local
+
+# Arbitrary Hydra overrides:
+bash run.sh --local --overrides "trainer.max_epochs=5 task.subject_mask_window=3"
+```
+
+---
+
+## Repo layout
+
+```
+run.sh                    # unified entrypoint — start here
+launch_training.py        # Hydra entry for train/chain modes
+train.py                  # training loop (single + chained)
+causal_trace.py           # ROME-style causal tracing
+config/                   # Hydra configs (task, experiment, model, data)
+project/                  # library code (data, tasks, eval, utils)
+scripts/                  # SLURM-aware wrappers called by run.sh
+  ├─ run_training.sh      # single train run
+  ├─ run_chained_training.sh
+  ├─ run_width_sweep.sh
+  └─ run_causal_trace.sh
+data/rwku/                # benchmark download + preprocessing
+reports/                  # experiment writeups
+```
+
+---
+
+## Method notes
+
+### Align-then-Unlearn (baseline)
+The LLM is first augmented with a small **embedding prediction module** trained to anticipate future-context embeddings. Unlearning then fine-tunes the LLM to drive those predicted embeddings *away from* a target concept's embedding, in the semantic space of a frozen sentence encoder. Because the signal lives in embedding space rather than on output tokens, it survives prompt rephrasing better than GA/NPO.
+
+### What we added
+- **Layer-informed hooking.** Instead of tapping the final layer, we choose the hook layer empirically via **causal tracing** (Meng et al. 2022). See `causal_trace.py` and `--mode trace`.
+- **Subject-token masking.** The ReLU-cosine unlearning loss is applied only at positions that belong to the subject span (`task.subject_mask_window` dilates the span by N tokens on each side). Other positions are optionally anchored to the pre-unlearn model via KL-retain (`task.training_module.kl_retain_weight`).
+- **Chained unlearning.** `--mode chain` forgets multiple (target, layer) pairs sequentially, feeding each step's modified model into the next, with pre/post USR/APR/GUR evals for every target.
+
+### Causal tracing in one paragraph
+For each prompt about a target (e.g. *"The Shining was written by"*):
+1. **Clean pass** — record P(correct answer) and all hidden states.
+2. **Corrupted pass** — add Gaussian noise (σ = `noise_multiplier` × embedding-layer std) to the subject token embeddings; answer probability collapses.
+3. **Restore layer *l*** — run the corrupted input but patch layer *l* back to its clean hidden state. Measure recovery.
+
+$$\text{Recovery}(l) = \frac{P^{(l)}_{\text{restored}} - P_{\text{corrupted}}}{P_{\text{clean}} - P_{\text{corrupted}}}$$
+
+Layers with high average recovery across prompts are where the entity's knowledge lives — those are the layers we hook for unlearning.
+
+---
+
+## Requirements
+
+- Python ≥ 3.10
+- A CUDA GPU (A100 / H100 / H200 used in our runs; 24 GB works for Phi-3.5-mini)
+- `transformers==4.51.3` is pinned — newer versions break the model hooks we use
+
+See `pyproject.toml` and `requirements.txt` for the full list.
+
+---
 
 ## Citation
-```
+
+```bibtex
 @article{spohn2025align,
-  title={Align-then-Unlearn: Embedding Alignment for LLM Unlearning},
-  author={Spohn, Philipp and Girrbach, Leander and Bader, Jessica and Akata, Zeynep},
-  journal={ICML 2025 Workshop on Machine Unlearning for Generative AI},
-  year={2025}
+  title  = {Align-then-Unlearn: Embedding Alignment for LLM Unlearning},
+  author = {Spohn, Philipp and Girrbach, Leander and Bader, Jessica and Akata, Zeynep},
+  journal= {ICML 2025 Workshop on Machine Unlearning for Generative AI},
+  year   = {2025}
 }
 ```
 
-## Causal Tracing (ROME-style)
- 
-### Method
- 
-Causal tracing, introduced by Meng et al. (2022) for the ROME knowledge editing method, identifies layers that are *causally responsible* for producing factual outputs about a target entity.
- 
-**Procedure:**
- 
-1. **Clean forward pass:** Run the prompt (e.g., "The Shining was written by") through the model and record P(correct answer) — e.g., P("Stephen") = 0.85. Save all intermediate hidden states.
- 
-2. **Corrupted forward pass:** Add Gaussian noise (σ = 3× embedding layer std) to the subject token embeddings ("The Shining"), which disrupts the model's ability to recall the associated fact. Record the degraded probability — e.g., P("Stephen") drops to 0.003.
- 
-3. **Per-layer restoration:** For each layer *l*, run the corrupted input but *restore* the clean hidden state at layer *l* only. Measure how much the correct output probability recovers.
- 
-### Metric: Recovery Fraction
- 
-$$\text{Recovery}(l) = \frac{P_{\text{restored}}^{(l)} - P_{\text{corrupted}}}{P_{\text{clean}} - P_{\text{corrupted}}}$$
- 
-| Value | Interpretation |
-|-------|---------------|
-| 1.0 | Restoring this layer fully recovers the correct answer — the knowledge flows through here |
-| 0.5 | Partial recovery — this layer carries some but not all of the relevant information |
-| 0.0 | No recovery — this layer is not causally involved in producing this fact |
-| < 0 | Restoring this layer actually *hurts* — the corruption may have accidentally helped at this layer |
- 
-**Averaging:** We average recovery fractions across multiple prompts about the same target entity to get a robust per-layer profile. Different prompts test different facts (birthplace, occupation, works), so the average reflects where the entity's knowledge is stored in general, not just one specific fact.
+## Acknowledgements
+- Based on the template by [Marten Lienen](https://github.com/martenlienen).
+- RWKU benchmark code adopted from [jinzhuoran/RWKU](https://github.com/jinzhuoran/RWKU).
+- Original Align-then-Unlearn implementation from [ExplainableML/align-then-unlearn](https://github.com/ExplainableML/align-then-unlearn).
